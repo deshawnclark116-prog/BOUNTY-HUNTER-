@@ -94,3 +94,10 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - Maximum declared model: 15,360 states and 200 overlapping rules; 15,360 conflicts and 30,720 total findings correctly reported. Reversing rule and contract order produced identical results; sample input remained unchanged.
 - 20/20 malformed model inputs rejected. Total assertions 16,407, zero failures. Maximum model evaluation measured 923 ms in the test isolate (not a production performance guarantee).
 - This is synthetic conformance of a bounded policy verifier, not a vulnerability-discovery benchmark. No general application-security performance improvement or independent holdout claim.
+
+## External authorization conformance challenge
+- Pinned upstream: cedar-policy/cedar-integration-tests at aff4b8b99acb71aa5b288fa236295cccbb40d541.
+- Selected complete multi and example_use_cases request suites (17 suite files, excluding auxiliary schema/policy JSON). Nine suites have unconditional scope predicates representable by the finite model after expanding public fixture entity membership; eight conditional/attribute suites are excluded from evaluated accuracy and included in coverage denominator.
+- Test-only adapter translates pinned public source policies into finite rules without consulting expected decisions. Expected request labels are used only as contracts. No live applications, external targets or general Cedar parser. The adapter and engine are evaluated together; the benchmark does not measure discovery or exploitability.
+- Report correct, incorrect, allow/deny counts, unexpected grants/denials, and unsupported requests. No promotion based solely on the representable subset.
+- Run: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45324430903
