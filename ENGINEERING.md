@@ -43,3 +43,12 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - Repairs: AppArmor, host ports, proc mount, SELinux, version-specific sysctl allowlist, defaulted volume sources. Local defensive configuration review only.
 - The 88 cases became a development/regression set when failure details were inspected. Candidate performance is not holdout performance. The same v1.29 fixture directories in Kubernetes v1.34.0 were checked by blob SHA and contain zero new cases, so they must not be counted as additional evidence.
 - G2 remains unmet: fewer than 100 cases and no fresh independent holdout for the repaired candidate. No evidence of general vulnerability discovery or bounty earnings. Future evaluation should use separately authored version-matched cases and independent application-security lab benchmarks without double-counting variants.
+
+## v0.5: independent application-security analyzer baseline
+- Dataset: OWASP BenchmarkPython commit f1291485808b66e20ddb6b01b10dc71b3df8c8ba; 1,230 cases, 452 positive and 778 negative, 14 categories.
+- Analyzer: unmodified Bandit 1.8.6, static analysis of public lab source only. No app execution or live testing.
+- Evaluator: exact case and CWE match. 219 non-target CWE alerts are not adjudicated by this answer key and must not be interpreted as verified findings or false positives.
+- Verified run: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45321431766
+- Results: TP 108, TN 753, FP 25, FN 344, errors 0; precision 81.20%, recall 23.89%, specificity 96.79%, coverage 100%.
+- Four categories had exact-CWE true positives; ten did not. This is an existing-tool baseline, not a novel detector. G2 application-security targets are not met.
+- Future defensive assessment research: compare established static analyzers under identical source-only conditions and evaluate repair guidance, with a separate independent holdout before claiming improvements. Preserve all results including failures and do not tune against the full public answer key.
