@@ -59,3 +59,6 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - Normalization preserves distinct CWE IDs from published rule metadata; findings without CWE metadata are counted separately, and unattributed analysis errors invalidate the score rather than silently being treated as negatives.
 - Comparison workflow: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45321685819
 - Predeclared interpretation: report each analyzer separately, including coverage and unadjudicated alerts. This public benchmark is not a fresh holdout for a combined candidate selected using its results. Do not claim real-world detection or bounty profitability.
+
+- First comparison attempt failed before analysis: the pinned Semgrep release imported pkg_resources, absent from the runner's environment. No score exists for that attempt.
+- Environment-only correction: setuptools 80.9.0 pinned; analyzer, rule snapshot, dataset and scoring unchanged. Corrected run: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45321752484
