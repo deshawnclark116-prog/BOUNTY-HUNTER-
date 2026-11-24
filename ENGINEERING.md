@@ -75,3 +75,8 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - New local npm lockfile/advisory snapshot reviewer and unified local assessment entry point. Stable versions and supported interval types only; unknowns are explicit; no external requests.
 - 12 dependency regression assertions and 8 integration assertions passed against the committed module source. A four-entry controlled lockfile tested using published GHSA-35jh-r3h4-6jhm correctly matched two affected versions and excluded two other entries (one fixed version, one unrelated package). This tests known-advisory matching, not novel vulnerability discovery.
 - No improvement to the application vulnerability benchmark is claimed. G2 remains unmet. No automatic bounty submissions, live target scanning, exploit execution, or real earnings.
+
+## v0.9: original finite policy model verification
+- First-party module policy-model.js, commit c055f673ed0b01989ec7c8748f6689525ffe6ff1. No external scanners or network calls. Exhaustive verification of a finite owner-provided authorization model against an explicit contract. Default deny, deny override, unknown contract coverage, overlap reporting.
+- 36 authored regression assertions passed before commit, including 24 deterministic single-cell changes to a synthetic model; each caused the expected one-cell contract mismatch. Not independently authored cases, not discovery of new real-world vulnerabilities, and not comparable to the OWASP code benchmark.
+- Limits: declarative model only, no extraction from deployed systems or actual application behavior. No claim that the implementation matches the model. G2 application-security gate remains unmet.
