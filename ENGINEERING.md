@@ -69,3 +69,9 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - Bandit remains the stronger overall standalone baseline on this exact-CWE metric. Neither meets application-security gates.
 - Public-lab comparison experiment: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45322132797 . Both reports scored separately and via union/intersection only for jointly evaluated cases. This is descriptive lab evidence, not a promoted production detector.
 - Local remediation tracker added, 19 authored assertions passed. It separates unreviewed alerts from human-confirmed issues and requires separate dated retest evidence to record a repair as resolved. Evidence attestations are not independently authenticated. Aggregate output omits identifiers and source/evidence data.
+
+## v0.8: unified defensive local assessment
+- Verified previous public lab union: TP 148, TN 694, FP 84, FN 304; precision 63.79%, recall 32.74%. Intersection: TP 31, FP 14, FN 421, TN 764. Neither combination qualifies for promotion. Run 45322132797.
+- New local npm lockfile/advisory snapshot reviewer and unified local assessment entry point. Stable versions and supported interval types only; unknowns are explicit; no external requests.
+- 12 dependency regression assertions and 8 integration assertions passed against the committed module source. A four-entry controlled lockfile tested using published GHSA-35jh-r3h4-6jhm correctly matched two affected versions and excluded two other entries (one fixed version, one unrelated package). This tests known-advisory matching, not novel vulnerability discovery.
+- No improvement to the application vulnerability benchmark is claimed. G2 remains unmet. No automatic bounty submissions, live target scanning, exploit execution, or real earnings.
