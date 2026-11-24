@@ -17,10 +17,18 @@ RESPONSES = {
     "flask.Response", "flask.make_response", "flask.wrappers.Response",
     "werkzeug.wrappers.Response", "django.http.HttpResponse",
     "django.http.JsonResponse", "django.http.HttpResponseRedirect",
+    "pyramid.response.Response", "pyramid.httpexceptions.HTTPFound",
+    "pyramid.httpexceptions.HTTPSeeOther", "pyramid.httpexceptions.HTTPTemporaryRedirect",
 }
 TLS_CALLS = {
     *("requests." + m for m in ("get", "post", "put", "patch", "delete", "head", "options", "request")),
     *("httpx." + m for m in ("get", "post", "put", "patch", "delete", "head", "options", "request", "Client", "AsyncClient")),
+}
+CERT_CALLS = {
+    "urllib3.PoolManager", "urllib3.ProxyManager", "urllib3.HTTPSConnectionPool",
+    "urllib3.connectionpool.HTTPSConnectionPool", "urllib3.connection_from_url",
+    "urllib3.proxy_from_url", "urllib3.poolmanager.PoolManager",
+    "urllib3.poolmanager.ProxyManager", "urllib3.poolmanager.proxy_from_url",
 }
 UNKNOWN = object()
 
@@ -146,12 +154,14 @@ def inspect_source(source):
     bindings = defaultdict(int)
     aliases = defaultdict(set)
     assignments = defaultdict(list)
+    import_counts = defaultdict(int)
     for n in nodes:
         if isinstance(n, ast.Import):
             for a in n.names:
                 local = a.asname or a.name.split(".")[0]
                 bindings[local] += 1
                 aliases[local].add(a.name if a.asname else local)
+                import_counts[local] += 1
         elif isinstance(n, ast.ImportFrom):
             for a in n.names:
                 if a.name != "*":
@@ -159,6 +169,7 @@ def inspect_source(source):
                     bindings[local] += 1
                     if n.level == 0 and n.module:
                         aliases[local].add(n.module + "." + a.name)
+                        import_counts[local] += 1
         elif isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
             bindings[n.id] += 1
         elif isinstance(n, ast.arg):
@@ -179,7 +190,7 @@ def inspect_source(source):
     def qualified(n):
         if isinstance(n, ast.Name):
             values = aliases.get(n.id, ())
-            return next(iter(values)) if bindings[n.id] == 1 and len(values) == 1 else None
+            return next(iter(values)) if bindings[n.id] == import_counts[n.id] and len(values) == 1 else None
         if isinstance(n, ast.Attribute):
             parent = qualified(n.value)
             return parent + "." + n.attr if parent else None
@@ -219,6 +230,17 @@ def inspect_source(source):
         if q in TLS_CALLS and keyword(n, "verify") is False:
             add(n, 295, "explicit_tls_verification_disabled",
                 "Keep certificate verification enabled; use an approved trust store.")
+        if q in CERT_CALLS and not any(k.arg is None for k in n.keywords) and not any(isinstance(a, ast.Starred) for a in n.args):
+            cert = [k.value for k in n.keywords if k.arg == "cert_reqs"]
+            if len(cert) == 1:
+                literal = cert[0]
+                weak = qualified(literal) in {"ssl.CERT_NONE", "ssl.CERT_OPTIONAL"}
+                if isinstance(literal, ast.Constant):
+                    weak = weak or (isinstance(literal.value, str) and literal.value in {"NONE", "OPTIONAL", "CERT_NONE", "CERT_OPTIONAL"})
+                    weak = weak or (type(literal.value) is int and literal.value in {0, 1})
+                if weak:
+                    add(n, 295, "certificate_requirement_not_required",
+                        "Require server certificate verification for HTTPS connections.")
         if q == "ssl._create_unverified_context":
             add(n, 295, "unverified_tls_context_selected",
                 "Use a verified TLS context appropriate to the connection.")
@@ -274,6 +296,18 @@ def selftest():
          " response=make_response(response)\n response.set_cookie('id','x',secure=False)", [614]),
         ("from flask import Response\ndef build(Response):\n r=Response()\n r.set_cookie('id','x')", []),
         ("from flask import Response\ndef build():\n r=Response()\n if cond: r=other()\n r.set_cookie('id','x')", []),
+    ])
+    cases.extend([
+        ("import urllib3 as u\nimport ssl\nu.PoolManager(cert_reqs=ssl.CERT_NONE)", [295]),
+        ("import urllib3\nimport ssl\nurllib3.PoolManager(cert_reqs=ssl.CERT_REQUIRED)", []),
+        ("from urllib3 import ProxyManager\nProxyManager('local',cert_reqs='NONE')", [295]),
+        ("from urllib3 import PoolManager\nPoolManager(cert_reqs=0)", [295]),
+        ("from urllib3 import PoolManager\nPoolManager(cert_reqs=None)", []),
+        ("from urllib3 import PoolManager\nPoolManager(cert_reqs='NONE',**opts)", []),
+        ("import ssl\nimport ssl\nimport urllib3\nurllib3.PoolManager(cert_reqs=ssl.CERT_OPTIONAL)", [295]),
+        ("import ssl\nssl=other\nimport urllib3\nurllib3.PoolManager(cert_reqs=ssl.CERT_NONE)", []),
+        ("from pyramid.response import Response\nr=Response()\nr.set_cookie('id','x',secure=False)", [614]),
+        ("from pyramid import httpexceptions as exc\nr=exc.HTTPFound()\nr.set_cookie('id','x',secure=True)", []),
     ])
     for source, expected in cases:
         assert [f["cwe"] for f in inspect_source(source)] == expected, source
