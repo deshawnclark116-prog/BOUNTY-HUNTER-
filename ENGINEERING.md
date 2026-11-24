@@ -117,3 +117,9 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - Comparison run https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45325225063. No general OPA equivalence or superiority claim from this narrow sample.
 
 - Verified successful OPA comparison job 138213081874: base 216/216 agreement (3 documented labels, 213 generated variations), HR extension 216/216 agreement (4 documented labels, 212 generated variations). Total 432/432 agreement, zero disagreement or unknown; both evaluators matched all seven documented labels. OPA allowed 21 and denied 411 cases overall. These are two stages of the same published design, not 432 independently authored policies. No change to the conditional engine. Do not interpret agreement as general superiority or actual vulnerability discovery.
+
+## Frozen v0.10 three-way policy comparison
+- Engine unchanged (conditional-policy.js blob c70c89e6ec62aeb390e42d54137820aca30ae2bf). New published design: profile authorization example from OPA policy-testing documentation, pinned source commit 7b037a97dd9b465dedb1c565f778ea06ac5569ea.
+- Execute the original four published OPA tests; evaluate the same documented requests and generated variations with OPA v1.4.2, Casbin 1.36.0 and the local verifier. Casbin and the local verifier use explicit fixture-specific translations; OPA executes its original published rules. No live applications or network tests.
+- Report documented-label accuracy, generated-case agreement, coverage, definitive disagreements and unknown decisions. The documented source maps an undefined OPA allow rule to deny, while the local verifier preserves uncertainty when missing attributes affect its decision. Do not score abstention as a correct denial.
+- Run: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45325482507
