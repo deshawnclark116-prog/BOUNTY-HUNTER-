@@ -1,6 +1,6 @@
 # Bounty Hunter
 
-A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.8, not an autonomous vulnerability hunter and not a source of guaranteed income.
+A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.9, not an autonomous vulnerability hunter and not a source of guaranteed income.
 
 ## Run (Node.js 20+)
 
@@ -94,3 +94,10 @@ node local-assessment.js review /path/to/private-assessment.json --authorized-lo
 Bundle fields: schema_version (1), authorization (owner_or_explicit_permission), optional kubernetes (array of JSON workload manifests), optional npm (object with lockfile, an npm v2/v3 package-lock JSON object, and snapshot, an object containing source, as_of and advisories in OSV JSON format), and optional remediation (the private ledger described above).
 The dependency module supports stable npm versions, explicit affected versions and supported SEMVER/ECOSYSTEM interval events. Unsupported package identities, versions and advisory ranges are flagged as unknown. A match is a known advisory, not proof of exploitability or a novel finding. No match does not imply safety; the snapshot may be incomplete or outdated. The program does not fetch advisory data or send inventory to external services. Reports may contain package names and versions: keep them private.
 The unified review marks absent sections and evaluation failures explicitly. Exit 3 means partial review, exit 1 invalid input, and exit 0 only means the implemented review sections ran; it does not mean the application is secure. Application analyzer experiments remain separate; the combined OWASP lab benchmark is not a production detector.
+
+## v0.9 first-party policy design verifier
+```sh
+node policy-model.js test
+node policy-model.js review examples/policy-model.json --authorized-local
+```
+This standalone module uses no scanner or external dependency. It compares an explicitly supplied, owner-approved finite authorization contract against a local declarative model of access rules. It enumerates the declared role/action/resource combinations, three resource relationships (own, same_tenant, other_tenant), and two authentication states. The semantics are default deny with explicit deny overriding allow. Rules support exact selectors or a wildcard. Missing contract rows remain unknown; overlapping decisions are review leads. Only the supplied policy model is checked, not actual deployed behavior. Do not submit model mismatches as vulnerability reports. Keep actual designs and review results private. See the synthetic example for the JSON shape.
