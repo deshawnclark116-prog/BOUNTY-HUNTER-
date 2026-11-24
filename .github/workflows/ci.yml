@@ -40,3 +40,5 @@ jobs:
       - run: node benchmark/conditional-fresh.js
       - run: node benchmark/conditional-typed-challenge.js
       - run: node benchmark/conditional-domain-fresh.js
+      - run: node workflow-review.js test
+      - run: node benchmark/workflow-traces.js
