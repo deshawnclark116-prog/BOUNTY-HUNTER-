@@ -1,6 +1,6 @@
 # Bounty Hunter
 
-A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.1, not an autonomous vulnerability hunter and not a source of guaranteed income.
+A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.2, not an autonomous vulnerability hunter and not a source of guaranteed income.
 
 ## Run (Node.js 20+)
 
@@ -34,3 +34,17 @@ The example policy is deliberately blocked. Copy it outside this public reposito
 
 ## Next milestone
 Expand local benchmarks across security controls, measure false positives, and add a private opportunity and outcome ledger before considering authorized real-world research. Track confirmed findings, duplicates, rejections, payouts and hours spent separately.
+
+## v0.2 research and accounting
+
+Read [ENGINEERING.md](ENGINEERING.md) for the mission, metrics and promotion gates.
+
+```sh
+node research.js test
+node research.js benchmark
+node research.js practice /path/to/synthetic-fixture.json
+node research.js report /path/to/private-checklist.json
+node research.js ledger /path/to/private-ledger.json
+```
+
+The benchmark checks expected vs observed boolean security controls in synthetic fixtures; null means unknown. It does not independently discover vulnerabilities. Ledger records use unique id, status, hours, cost_cents and payout_cents; only actually paid outcomes count as revenue. Keep real research records outside this public repo. The report checker validates completeness and self-attestations, not authenticity.
