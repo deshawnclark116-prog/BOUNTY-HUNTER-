@@ -80,3 +80,10 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - First-party module policy-model.js, commit c055f673ed0b01989ec7c8748f6689525ffe6ff1. No external scanners or network calls. Exhaustive verification of a finite owner-provided authorization model against an explicit contract. Default deny, deny override, unknown contract coverage, overlap reporting.
 - 36 authored regression assertions passed before commit, including 24 deterministic single-cell changes to a synthetic model; each caused the expected one-cell contract mismatch. Not independently authored cases, not discovery of new real-world vulnerabilities, and not comparable to the OWASP code benchmark.
 - Limits: declarative model only, no extraction from deployed systems or actual application behavior. No claim that the implementation matches the model. G2 application-security gate remains unmet.
+
+## v0.9 frozen-engine differential stress test
+- Engine frozen at c055f673ed0b01989ec7c8748f6689525ffe6ff1. Benchmark af304fb4655b2c8bab34b97b564f09432e28c4cd.
+- 302 models: 300 seeded synthetic, one maximum-size synthetic model, one translated Cedar README example. Separately implemented set-expansion oracle agrees on all 302. 47,772 states, 43,145 labeled contract states, 4,627 unknown. 2,664 overgrants, 11,303 undergrants, 4,273 overlaps, 29,178 contract matches. Overlaps can coincide with other categories.
+- All 30 rule-order checks and 10 malformed rejection cases passed. Maximum-size model: 15,360 states. Both documented Cedar decisions matched; the remaining 10 states in the translated example were unspecified, not independent labels.
+- The first generator had correlated random draws and zero overlaps; corrected benchmark generator only and required nonzero overlap/mismatch coverage. Original engine unchanged.
+- Synthetic differential evidence is not a real-world vulnerability benchmark. Only two independently documented decisions were translated; no external authorization engine was executed. General application discovery performance remains unproven.
