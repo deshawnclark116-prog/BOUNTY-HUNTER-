@@ -101,3 +101,5 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - Test-only adapter translates pinned public source policies into finite rules without consulting expected decisions. Expected request labels are used only as contracts. No live applications, external targets or general Cedar parser. The adapter and engine are evaluated together; the benchmark does not measure discovery or exploitability.
 - Report correct, incorrect, allow/deny counts, unexpected grants/denials, and unsupported requests. No promotion based solely on the representable subset.
 - Run: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45324430903
+
+- Verified GitHub Actions job 138210486032: 61 external request labels across the selected 17 suites; 31 evaluated and correct, 0 incorrect, 30 unsupported. 16 allow and 15 deny labels among evaluated requests, zero unexpected grants or denials. Supported-case accuracy 100%, selected-suite coverage 50.82%. These results concern translated policy conformance only, not independent vulnerability discovery. The engine itself was unchanged. G2 remains unmet.
