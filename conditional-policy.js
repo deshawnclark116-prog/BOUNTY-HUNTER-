@@ -12,7 +12,7 @@ function reviewConditions(model){
  const roots=["principal","resource","context"];
  const dims=["role","action","resource"];
  if(!obj(model)||model.schema_version!==2||model.environment!=="local_policy_design"||model.authorization!=="owner_or_explicit_permission")invalid();
- fields(model,["schema_version","environment","authorization","rules","cases"]);
+ fields(model,["schema_version","environment","authorization","rules","cases","domains"],["schema_version","environment","authorization","rules","cases"]);
  if(!Array.isArray(model.rules)||model.rules.length>200||!Array.isArray(model.cases)||model.cases.length<1||model.cases.length>2000)invalid();
  let nodes=0,attributeNodes=0;
  const missing=Symbol("missing");
@@ -45,12 +45,13 @@ function reviewConditions(model){
  function all(xs){return xs.includes(false)?false:xs.includes(U)?U:true}
  function any(xs){return xs.includes(true)?true:xs.includes(U)?U:false}
  const not=x=>x===U?U:!x;
- function evaluate(e,attrs,abstract){
-  if(e.op==="and")return all(e.args.map(x=>evaluate(x,attrs,abstract)));
-  if(e.op==="or")return any(e.args.map(x=>evaluate(x,attrs,abstract)));
-  if(e.op==="not")return not(evaluate(e.arg,attrs,abstract));
+ function evaluate(e,attrs,abstract,hypothetical){
+  if(e.op==="and")return all(e.args.map(x=>evaluate(x,attrs,abstract,hypothetical)));
+  if(e.op==="or")return any(e.args.map(x=>evaluate(x,attrs,abstract,hypothetical)));
+  if(e.op==="not")return not(evaluate(e.arg,attrs,abstract,hypothetical));
   if(e.op==="exists")return get(e.value,attrs)!==missing;
-  const l=get(e.left,attrs),r=get(e.right,attrs);
+  const resolve=o=>{const v=get(o,attrs);return v===missing&&hypothetical&&own(o,"path")&&hypothetical.has(JSON.stringify(o.path))?hypothetical.get(JSON.stringify(o.path)):v};
+  const l=resolve(e.left),r=resolve(e.right);
   if(l===missing||r===missing)return abstract?abstract(e):U;
   if(e.op==="eq"||e.op==="ne"){
    if(!scalar(l)||!scalar(r)||typeof l!==typeof r)return U;
@@ -71,6 +72,18 @@ function reviewConditions(model){
   rules.add(r.id);
   for(const k of ["when","unless"])if(own(r,k))validate(r[k]);
  }
+ const domains=new Map();
+ if(own(model,"domains")){
+  if(!Array.isArray(model.domains)||model.domains.length>16)invalid();
+  for(const d of model.domains){
+   fields(d,["path","values"]);
+   operand({path:d.path});
+   if(!Array.isArray(d.values)||!d.values.length||d.values.length>64||!d.values.every(v=>scalar(v)&&typeof v===typeof d.values[0])||new Set(d.values).size!==d.values.length)invalid();
+   const k=JSON.stringify(d.path);
+   for(const p of domains.values())if(p.path.slice(0,Math.min(p.path.length,d.path.length)).every((v,i)=>v===d.path[i]))invalid();
+   domains.set(k,d);
+  }
+ }
  const caseIds=new Set();
  for(const c of model.cases){
   fields(c,["id","role","action","resource","attributes","expected"]);
@@ -79,6 +92,13 @@ function reviewConditions(model){
   fields(c.attributes,roots);
   if(roots.some(k=>!obj(c.attributes[k])))invalid();
   attrTree(c.attributes);
+  for(const d of domains.values()){
+   let parent=c.attributes;
+   for(const key of d.path.slice(0,-1)){if(!obj(parent))invalid();if(!own(parent,key)){parent=missing;break}parent=parent[key]}
+   if(parent!==missing&&!obj(parent))invalid();
+   const actual=get({path:d.path},c.attributes);
+   if(actual!==missing&&!d.values.some(v=>v===actual))invalid();
+  }
  }
  // Refine only unresolved design decisions. Identical missing-value predicates
  // share a Boolean variable; different predicates remain independent, a conservative
@@ -111,7 +131,42 @@ function reviewConditions(model){
   }
   return {decision:consensus,reason:"invariant_abstract_completions"};
  }
- const refinement={attempted:0,resolved:0,remaining_unknown:0,budget_limited:0};
+ // Domain contracts are explicit owner-supplied assumptions, never inferred.
+ // Hypothetical values apply only to comparisons; existence remains an observed fact.
+ function refineDomains(c,matched){
+  const needed=new Map();let cost=0;
+  function visit(e){
+   cost++;
+   if(e.args){e.args.forEach(visit);return}
+   if(e.arg){visit(e.arg);return}
+   for(const o of [e.left,e.right])if(o&&own(o,"path")&&get(o,c.attributes)===missing){
+    const k=JSON.stringify(o.path);if(domains.has(k))needed.set(k,domains.get(k).values);
+   }
+  }
+  for(const r of matched)for(const k of ["when","unless"])if(own(r,k))visit(r[k]);
+  if(!needed.size)return {decision:"unknown",reason:"no_applicable_domains"};
+  let worlds=1;for(const vals of needed.values()){worlds*=vals.length;if(worlds>256)return {decision:"unknown",reason:"domain_world_limit"}}
+  const work=worlds*Math.max(1,cost+matched.length);
+  if(work>refinementBudget)return {decision:"unknown",reason:"work_limit"};
+  refinementBudget-=work;
+  const entries=[...needed],assignment=new Map();
+  let consensus,unresolved=false;
+  function visitWorld(i){
+   if(unresolved)return;
+   if(i<entries.length){const [k,vals]=entries[i];for(const v of vals){assignment.set(k,v);visitWorld(i+1);if(unresolved)break}return}
+   const permits=[],denials=[];
+   for(const r of matched){
+    const m=all([own(r,"when")?evaluate(r.when,c.attributes,undefined,assignment):true,own(r,"unless")?not(evaluate(r.unless,c.attributes,undefined,assignment)):true]);
+    (r.effect==="allow"?permits:denials).push(m);
+   }
+   const a=any(permits),d=any(denials);
+   const result=d===true||a===false?"deny":a===true&&d===false?"allow":"unknown";
+   if(result==="unknown"||(consensus!==undefined&&consensus!==result))unresolved=true;else consensus=result;
+  }
+  visitWorld(0);
+  return unresolved?{decision:"unknown",reason:"domain_not_invariant"}:{decision:consensus,reason:"invariant_declared_domain"};
+ }
+ const refinement={attempted:0,resolved:0,remaining_unknown:0,budget_limited:0,domain_resolved:0};
  const totals={cases:model.cases.length,decided:0,unknown:0,unlabeled:0,compared:0,correct:0,mismatches:0,overgrant:0,undergrant:0,conflicts:0};
  const results=[];
  for(const c of model.cases){
@@ -127,9 +182,15 @@ function reviewConditions(model){
   let reasoning="direct";
   if(decision==="unknown"){
    refinement.attempted++;
-   const r=refine(c,model.rules.filter(r=>dims.every(k=>r[k]==="*"||r[k]===c[k])));
+   const matched=model.rules.filter(r=>dims.every(k=>r[k]==="*"||r[k]===c[k]));
+   let r=refine(c,matched);
+   if(r.decision==="unknown"&&domains.size){
+    const typed=refineDomains(c,matched);
+    if(typed.decision!=="unknown"){r=typed;refinement.domain_resolved++}
+    else if(typed.reason!=="no_applicable_domains")r=typed;
+   }
    decision=r.decision;reasoning=r.reason;
-   if(decision==="unknown"){refinement.remaining_unknown++;if(r.reason==="work_limit"||r.reason==="unsupported_or_atom_limit")refinement.budget_limited++}
+   if(decision==="unknown"){refinement.remaining_unknown++;if(r.reason==="work_limit"||r.reason==="unsupported_or_atom_limit"||r.reason==="domain_world_limit")refinement.budget_limited++}
    else refinement.resolved++;
   }
   if(decision==="unknown")totals.unknown++;else totals.decided++;
@@ -140,7 +201,7 @@ function reviewConditions(model){
   else{totals.compared++;if(c.expected===decision){totals.correct++;status="match"}else{totals.mismatches++;totals[decision==="allow"?"overgrant":"undergrant"]++;status="model_mismatch"}}
   results.push({case_id:c.id,decision,status,reasoning,conflict:a===true&&d===true});
  }
- return {status:totals.unknown||totals.unlabeled?"PARTIAL_MODEL_REVIEW":"COMPLETE_MODEL_REVIEW",totals,refinement,results,notice:"Owner-supplied local policy cases only. Unresolved inputs abstain; invariant abstract predicate completions may resolve a model decision; explicit deny overrides permit. No actual application behavior or exploitability verified. Attributes are not echoed."};
+ return {status:totals.unknown||totals.unlabeled?"PARTIAL_MODEL_REVIEW":"COMPLETE_MODEL_REVIEW",totals,refinement,results,notice:"Owner-supplied local policy cases only. Unresolved inputs abstain; invariant abstract predicate completions or explicitly declared finite domains may resolve a model decision; explicit deny overrides permit. No actual application behavior or exploitability verified. Attributes are not echoed."};
 }
 function selftest(){
  const literal=x=>({literal:x}),p=(...path)=>({path});
