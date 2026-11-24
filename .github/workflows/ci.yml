@@ -35,3 +35,4 @@ jobs:
       - run: node policy-model.js test
       - run: node benchmark/policy-differential.js
       - run: node benchmark/policy-exhaustive.js
+      - run: node conditional-policy.js test
