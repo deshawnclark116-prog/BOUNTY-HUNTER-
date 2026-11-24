@@ -1,6 +1,6 @@
 # Bounty Hunter
 
-A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.3, not an autonomous vulnerability hunter and not a source of guaranteed income.
+A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.5, not an autonomous vulnerability hunter and not a source of guaranteed income.
 
 ## Run (Node.js 20+)
 
@@ -67,3 +67,16 @@ Reference: https://kubernetes.io/docs/concepts/security/pod-security-standards/
 This is a partial static configuration check, not a schema validator, runtime security audit, or independent vulnerability discovery system. Policy gaps can be intentional and are not automatically bounty eligible. Review fixes in context with workload owners and test changes before rollout. Keep real manifests and outputs private.
 
 Regression: 25 authored scenarios, 19 expected gaps, 6 malformed inputs rejected. Independent evaluation remains outstanding.
+
+## v0.4 configuration benchmark
+The patched Kubernetes auditor correctly classified all 88 official Restricted v1.29 fixture cases. These are now a development set, not a fresh holdout. See ENGINEERING.md for the baseline and limitations.
+
+## v0.5 application security baseline
+The Python benchmark workflow checks out the pinned public OWASP BenchmarkPython lab and runs Bandit 1.8.6 on its source files only. It does not run the web application or access a deployed target. The scorer matches each test file and intended CWE to the independently maintained answer key, records failures to evaluate, and reports unadjudicated alerts separately.
+
+For a local Python project you own or have explicit permission to review, Bandit is also available as a defensive code-review tool:
+```sh
+python -m pip install bandit==1.8.6
+bandit -r /path/to/authorized/local/source -f json -o /path/to/private/report.json
+```
+Keep the report private; it can contain source snippets. Treat alerts as review leads, not confirmed vulnerabilities or bounty claims. No source-code execution, live testing, or automated submission is part of this workflow.
