@@ -1,0 +1,50 @@
+name: Independent Kubernetes fixture benchmark
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'kube-review.js'
+      - 'benchmark-upstream.js'
+      - 'benchmark/import_fixtures.py'
+      - '.github/workflows/upstream-benchmark.yml'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: kubernetes/kubernetes
+          ref: v1.30.0
+          path: upstream
+          persist-credentials: false
+          sparse-checkout: |
+            staging/src/k8s.io/pod-security-admission/test/testdata/restricted/v1.30
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install PyYAML==6.0.2
+      - name: Record source and evaluator versions
+        run: |
+          mkdir -p benchmark-output
+          git rev-parse HEAD > benchmark-output/auditor-commit.txt
+          git -C upstream rev-parse HEAD > benchmark-output/upstream-commit.txt
+          sha256sum kube-review.js > benchmark-output/auditor-sha256.txt
+      - name: Evaluate official fixtures as data only
+        run: |
+          python benchmark/import_fixtures.py upstream/staging/src/k8s.io/pod-security-admission/test/testdata/restricted/v1.30 > fixtures.json
+          node benchmark-upstream.js fixtures.json > benchmark-output/results.json
+          node -e 'const {details,...summary}=require("./benchmark-output/results.json"); console.log(JSON.stringify(summary,null,2))'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upstream-benchmark-results
+          path: benchmark-output/
+          if-no-files-found: error
