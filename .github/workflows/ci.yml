@@ -20,3 +20,5 @@ jobs:
           node bounty.js review examples/policy.json
           status=$?
           test "$status" -eq 2
+      - run: node research.js test
+      - run: node research.js benchmark
