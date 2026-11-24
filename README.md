@@ -108,3 +108,10 @@ node conditional-policy.js test
 node conditional-policy.js review examples/conditional-policy.json --authorized-local
 ```
 Schema v2 accepts explicit owner-provided local cases and declarative rules. Rules use role/action/resource selectors, allow/deny effects, optional when and unless expressions, and default deny with explicit deny precedence. Expressions support and/or/not, exists, typed equality and inequality, numeric comparisons and scalar list membership. Operands are literal values or bounded attribute paths under principal/resource/context. No arbitrary expression execution. Missing attributes and incompatible types produce unknown when they can affect a decision. The sample intentionally contains an unresolved case and returns exit 3. Exit 0 means a complete model review, not proof of security. Case identifiers and model decisions are reported; attribute values are not echoed. This verifier does not extract policies from applications, evaluate deployed behavior or establish exploitability. Keep real designs private. The original v1 verifier remains available.
+
+## First-party Python digest policy review
+```sh
+python digest-review.py test
+python digest-review.py review path/to/authorized-local-file.py --authorized-local
+```
+Reads Python source through the AST without importing or running the inspected program. Reports explicitly selected legacy digest algorithms with recognized import provenance. Explicit non-security hashlib usage is excluded. A directory review covers immediate Python files only. Dynamic resolution, attribute reassignment, runtime context, nonliteral algorithm choice and other vulnerability classes are not fully modeled. A flag is a cryptographic policy observation, not confirmation of security impact; a clean result is not an assurance of security. The public OWASP benchmark workflow scores exact case/CWE agreement using the pinned lab answer key.
