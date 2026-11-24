@@ -33,3 +33,13 @@ Read current official rules for each program and follow the stricter applicable 
 
 ## v0.3 defensive audit milestone
 Added a local Kubernetes manifest reviewer grounded in a subset of the official Restricted Pod Security Standards. 25 authored fixture cases matched expected findings, including inheritance and OS-specific behavior; 6 malformed cases rejected. These are development regressions, not an independent holdout. G2 remains unmet. The module provides configuration guidance for owners or explicitly authorized reviewers, not exploitability assessments. No live testing or submission added.
+
+## v0.4: official policy conformance repair
+- Frozen v0.3 baseline: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45320939440
+- Dataset: Kubernetes upstream commit 7c48c2bd72b9bf5c44d21d7338cc7bea77d0ad2a, Restricted v1.29 fixtures (88 cases).
+- Baseline: TP 56, TN 18, FP 0, FN 13, errors 1.
+- Candidate: commit 2bf7b7697925923120b255f6a629927d008f8df5; https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45321239316
+- Candidate: TP 69, TN 19, FP 0, FN 0, errors 0. Internal regression workflow also succeeded.
+- Repairs: AppArmor, host ports, proc mount, SELinux, version-specific sysctl allowlist, defaulted volume sources. Local defensive configuration review only.
+- The 88 cases became a development/regression set when failure details were inspected. Candidate performance is not holdout performance. The same v1.29 fixture directories in Kubernetes v1.34.0 were checked by blob SHA and contain zero new cases, so they must not be counted as additional evidence.
+- G2 remains unmet: fewer than 100 cases and no fresh independent holdout for the repaired candidate. No evidence of general vulnerability discovery or bounty earnings. Future evaluation should use separately authored version-matched cases and independent application-security lab benchmarks without double-counting variants.
