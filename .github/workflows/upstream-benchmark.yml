@@ -20,11 +20,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: kubernetes/kubernetes
-          ref: v1.30.0
+          ref: 7c48c2bd72b9bf5c44d21d7338cc7bea77d0ad2a
           path: upstream
           persist-credentials: false
           sparse-checkout: |
-            staging/src/k8s.io/pod-security-admission/test/testdata/restricted/v1.30
+            staging/src/k8s.io/pod-security-admission/test/testdata/restricted/v1.29
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -40,7 +40,7 @@ jobs:
           sha256sum kube-review.js > benchmark-output/auditor-sha256.txt
       - name: Evaluate official fixtures as data only
         run: |
-          python benchmark/import_fixtures.py upstream/staging/src/k8s.io/pod-security-admission/test/testdata/restricted/v1.30 > fixtures.json
+          python benchmark/import_fixtures.py upstream/staging/src/k8s.io/pod-security-admission/test/testdata/restricted/v1.29 > fixtures.json
           node benchmark-upstream.js fixtures.json > benchmark-output/results.json
           node -e 'const {details,...summary}=require("./benchmark-output/results.json"); console.log(JSON.stringify(summary,null,2))'
       - uses: actions/upload-artifact@v4
