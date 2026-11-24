@@ -1,0 +1,22 @@
+name: Offline regression
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node bounty.js test
+      - run: node bounty.js practice examples/practice.json
+      - run: |
+          set +e
+          node bounty.js review examples/policy.json
+          status=$?
+          test "$status" -eq 2
