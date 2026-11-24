@@ -1,6 +1,6 @@
 'use strict';
 const {reviewConditions}=require('../conditional-policy.js');
-function challenge(review){
+function challenge(review, supplyDomains=false){
  const L=literal=>({literal}),P=k=>({path:["context",k]}),cmp=(op,k,v)=>({op,left:P(k),right:L(v)}),eq=(k,v)=>cmp("eq",k,v);
  const and=(...args)=>({op:"and",args}),or=(...args)=>({op:"or",args}),not=arg=>({op:"not",arg});
  const member=(k,values)=>cmp("in",k,values);
@@ -30,7 +30,8 @@ function challenge(review){
  const summary={designs:designs.length,cases:0,complete:0,complete_correct:0,definite_correct:0,necessary_unknown:0,avoidable_unknown_under_declared_domains:0,unsound_under_declared_domains:0,breakdown:[]};
  const rows=inputs.map((x,i)=>row("c"+i,x));
  for(const d of designs){
-  const output=review(model(d.rules,rows));
+  const m=model(d.rules,rows);
+  const output=review(supplyDomains?{...m,domains:Object.entries(domains).map(([k,values])=>({path:["context",k],values}))}:m);
   const tally={design:d.name,cases:inputs.length,definite:0,necessary_unknown:0,avoidable_unknown:0,unsound:0};
   for(let i=0;i<inputs.length;i++){
    const x=inputs[i],possible=new Set(worlds.filter(w=>Object.entries(x).every(([k,v])=>w[k]===v)).map(w=>d.truth(w)?"allow":"deny"));
@@ -43,6 +44,6 @@ function challenge(review){
   }
   summary.breakdown.push(tally);
  }
- return {...summary,scope:"Fresh authored synthetic typed-domain test. Oracle domains not provided to engine; avoidable unknowns are conditional on those domains, not established incorrect decisions."};
+ return {...summary,scope:supplyDomains?"Development regression with explicit finite domains supplied.":"No-domain conservative baseline; oracle domains not supplied."};
 }
-const r=challenge(reviewConditions);console.log(JSON.stringify(r,null,2));if(r.unsound_under_declared_domains||r.complete_correct!==r.complete)process.exitCode=1;
+const baseline=challenge(reviewConditions),candidate=challenge(reviewConditions,true);console.log(JSON.stringify({baseline,candidate},null,2));if(baseline.unsound_under_declared_domains||candidate.unsound_under_declared_domains||candidate.avoidable_unknown_under_declared_domains||candidate.complete_correct!==candidate.complete)process.exitCode=1;
