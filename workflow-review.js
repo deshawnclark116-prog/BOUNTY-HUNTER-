@@ -37,12 +37,12 @@ function reviewWorkflow(model){
    if(e.sequence<=sequence)flags.push("nonmonotonic_sequence");
    const contiguous=e.sequence===sequence+1;
    if(contiguous&&prior!==null&&e.observed_before!==null&&prior!==e.observed_before)flags.push("state_discontinuity");
-   if(e.observed_before!==null&&e.observed_after!==null&&e.outcome!==null){
+   if(e.observed_before!==null&&e.outcome!==null){
     const allowed=rules.get(key(e.observed_before,e.event,e.role));
     if(e.outcome==="accepted"){
      if(allowed===undefined)flags.push("undeclared_accepted_transition");
-     else if(e.observed_after!==allowed)flags.push("unexpected_result_state");
-    }else if(e.observed_before!==e.observed_after)flags.push("rejected_event_changed_state");
+     else if(e.observed_after!==null&&e.observed_after!==allowed)flags.push("unexpected_result_state");
+    }else if(e.observed_after!==null&&e.observed_before!==e.observed_after)flags.push("rejected_event_changed_state");
    }
    const status=flags.length?"inconsistent":!contiguous||prior===null||e.observed_before===null||e.observed_after===null||e.outcome===null?"unknown":"consistent";
    counts[status]++;totals[status]++;
@@ -67,6 +67,8 @@ function selftest(){
  check(run([good[0],ev(2,"archive","reviewer","draft","draft","rejected")]).results[0].reasons.state_discontinuity===1,"discontinuous record");
  check(run([good[0],{...good[1],sequence:3}]).totals.unknown===1,"missing record");
  check(run([{...good[0],observed_after:null}]).totals.unknown===1,"missing state");
+ check(run([ev(1,"archive","author","draft",null)]).totals.inconsistent===1,"accepted undeclared transition with missing result");
+ check(run([ev(1,"archive","author","draft",null,"rejected")]).totals.unknown===1,"missing rejected result");
  check(run([{...good[0],outcome:null}]).totals.unknown===1,"missing outcome");
  check(run([good[0],{...good[1],sequence:1}]).results[0].reasons.nonmonotonic_sequence===1,"duplicate sequence");
  check(run([]).status==="PARTIAL_REVIEW","empty trace");
