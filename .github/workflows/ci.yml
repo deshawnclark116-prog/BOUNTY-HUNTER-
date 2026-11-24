@@ -28,3 +28,5 @@ jobs:
           node kube-review.js audit examples/kube-demo.json --authorized-local
           status=$?
           test "$status" -eq 3
+      - run: node remediation.js test
+      - run: python3 benchmark/compare_python.py test
