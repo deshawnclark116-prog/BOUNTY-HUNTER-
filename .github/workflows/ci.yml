@@ -42,3 +42,4 @@ jobs:
       - run: node benchmark/conditional-domain-fresh.js
       - run: node workflow-review.js test
       - run: node benchmark/workflow-traces.js
+      - run: node benchmark/evidence-readiness.js
