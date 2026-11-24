@@ -1,6 +1,6 @@
 # Bounty Hunter
 
-A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.9, not an autonomous vulnerability hunter and not a source of guaranteed income.
+A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.10, not an autonomous vulnerability hunter and not a source of guaranteed income.
 
 ## Run (Node.js 20+)
 
@@ -101,3 +101,10 @@ node policy-model.js test
 node policy-model.js review examples/policy-model.json --authorized-local
 ```
 This standalone module uses no scanner or external dependency. It compares an explicitly supplied, owner-approved finite authorization contract against a local declarative model of access rules. It enumerates the declared role/action/resource combinations, three resource relationships (own, same_tenant, other_tenant), and two authentication states. The semantics are default deny with explicit deny overriding allow. Rules support exact selectors or a wildcard. Missing contract rows remain unknown; overlapping decisions are review leads. Only the supplied policy model is checked, not actual deployed behavior. Do not submit model mismatches as vulnerability reports. Keep actual designs and review results private. See the synthetic example for the JSON shape.
+
+## v0.10 conditional authorization design review
+```sh
+node conditional-policy.js test
+node conditional-policy.js review examples/conditional-policy.json --authorized-local
+```
+Schema v2 accepts explicit owner-provided local cases and declarative rules. Rules use role/action/resource selectors, allow/deny effects, optional when and unless expressions, and default deny with explicit deny precedence. Expressions support and/or/not, exists, typed equality and inequality, numeric comparisons and scalar list membership. Operands are literal values or bounded attribute paths under principal/resource/context. No arbitrary expression execution. Missing attributes and incompatible types produce unknown when they can affect a decision. The sample intentionally contains an unresolved case and returns exit 3. Exit 0 means a complete model review, not proof of security. Case identifiers and model decisions are reported; attribute values are not echoed. This verifier does not extract policies from applications, evaluate deployed behavior or establish exploitability. Keep real designs private. The original v1 verifier remains available.
