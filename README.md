@@ -1,6 +1,6 @@
 # Bounty Hunter
 
-A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.7, not an autonomous vulnerability hunter and not a source of guaranteed income.
+A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.8, not an autonomous vulnerability hunter and not a source of guaranteed income.
 
 ## Run (Node.js 20+)
 
@@ -85,3 +85,12 @@ Keep the report private; it can contain source snippets. Treat alerts as review 
 Run `node remediation.js test` for regression tests, or
 `node remediation.js review /path/to/private-assessment.json --authorized-local`
 to summarize owner-authorized, human-reviewed remediation records. The input is a JSON object with authorization (owner_or_explicit_permission), as_of (ISO date), and records. Each record requires a unique id, state and priority. Confirmed issues need an owner, remediation and initial_review (reviewer, evidence_ref, date, result=confirmed). Resolved issues also require a distinct retest (reviewer, evidence_ref, date, result=passed). Not-applicable issues require initial_review with result=not_applicable and a rationale. Optional due dates support overdue tracking. This is an attestation checker, not independent proof. Keep all assessment data private and use only opaque local evidence references. Output is aggregate counts without source or evidence text.
+
+## v0.8 unified local assessment
+For explicitly authorized local review, prepare a private JSON bundle outside this public repository. Run:
+```sh
+node local-assessment.js review /path/to/private-assessment.json --authorized-local
+```
+Bundle fields: schema_version (1), authorization (owner_or_explicit_permission), optional kubernetes (array of JSON workload manifests), optional npm (object with lockfile, an npm v2/v3 package-lock JSON object, and snapshot, an object containing source, as_of and advisories in OSV JSON format), and optional remediation (the private ledger described above).
+The dependency module supports stable npm versions, explicit affected versions and supported SEMVER/ECOSYSTEM interval events. Unsupported package identities, versions and advisory ranges are flagged as unknown. A match is a known advisory, not proof of exploitability or a novel finding. No match does not imply safety; the snapshot may be incomplete or outdated. The program does not fetch advisory data or send inventory to external services. Reports may contain package names and versions: keep them private.
+The unified review marks absent sections and evaluation failures explicitly. Exit 3 means partial review, exit 1 invalid input, and exit 0 only means the implemented review sections ran; it does not mean the application is secure. Application analyzer experiments remain separate; the combined OWASP lab benchmark is not a production detector.
