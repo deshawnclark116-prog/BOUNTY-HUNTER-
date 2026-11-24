@@ -53,4 +53,8 @@ def evaluate():
     return {"scope":"authored configuration observations, not real vulnerability detection", "totals":totals,"cases":cases}
 
 if __name__=="__main__":
-    print(json.dumps(evaluate(),indent=2))
+    result = evaluate()
+    print(json.dumps(result,indent=2))
+    counts = result["totals"]
+    if counts != dict(tp=4, tn=20, fp=0, fn=0, unresolved=2, unverified_flags=0):
+        raise SystemExit("Configuration observation regression failed")
