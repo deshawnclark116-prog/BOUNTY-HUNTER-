@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - policy-model.js
+      - conditional-policy.js
+      - benchmark/cedar-conditional.js
       - benchmark/cedar-public.js
       - .github/workflows/cedar-public.yml
 permissions:
@@ -31,3 +33,5 @@ jobs:
           node-version: '22'
       - name: Verify frozen engine against public local fixtures
         run: node benchmark/cedar-public.js cedar-fixtures
+      - name: Verify conditional model against public fixtures
+        run: node benchmark/cedar-conditional.js cedar-fixtures
