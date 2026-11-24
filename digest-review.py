@@ -7,9 +7,12 @@ import ast
 import json
 import os
 import pathlib
+import runpy
 import stat
 import sys
 from collections import defaultdict
+
+observation_calls = runpy.run_path(str(pathlib.Path(__file__).with_name('source-policy.py')))['observation_calls']
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_FILES = 2000
@@ -34,11 +37,12 @@ def inspect_source(source):
                 local = a.asname or a.name.split(".")[0]
                 aliases[local].add(a.name if a.asname else local)
                 bindings[local] += 1
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+        elif isinstance(node, ast.ImportFrom):
             for a in node.names:
                 if a.name != "*":
                     local = a.asname or a.name
-                    aliases[local].add(node.module + "." + a.name)
+                    if node.level == 0 and node.module:
+                        aliases[local].add(node.module + "." + a.name)
                     bindings[local] += 1
         elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
             bindings[node.id] += 1
@@ -61,7 +65,7 @@ def inspect_source(source):
             return parent + "." + node.attr if parent else None
         return None
     findings = []
-    for node in ast.walk(tree):
+    for node in observation_calls(tree):
         if not isinstance(node, ast.Call):
             continue
         q = qualified(node.func)
