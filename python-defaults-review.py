@@ -32,7 +32,7 @@ CERT_CALLS = {
 }
 UNKNOWN = object()
 
-def direct_cookie_observations(tree):
+def recognized_cookie_calls(tree):
     """Bounded lexical, straight-line review of response construction."""
     def local_bindings(body, args=None):
         counts = defaultdict(int)
@@ -89,15 +89,10 @@ def direct_cookie_observations(tree):
             return qname(node.func, imports)
         return None
 
-    def explicit_cookie(call, imports, values):
-        if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
-            return False
-        if call.func.attr != "set_cookie" or response(call.func.value, imports, values) not in RESPONSES:
-            return False
-        if len(call.args) > 2 or any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None for k in call.keywords):
-            return False
-        keys = [k.value for k in call.keywords if k.arg == "secure"]
-        return not keys or (len(keys) == 1 and isinstance(keys[0], ast.Constant) and keys[0].value is False)
+    def recognized_cookie(call, imports, values):
+        return (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "set_cookie"
+                and response(call.func.value, imports, values) in RESPONSES)
 
     findings = []
     def walk(body, inherited, args=None):
@@ -127,7 +122,7 @@ def direct_cookie_observations(tree):
                         imports.pop(k, None)
                 continue
             if isinstance(s, (ast.Expr, ast.Return)):
-                if explicit_cookie(s.value, imports, values):
+                if recognized_cookie(s.value, imports, values):
                     findings.append(s.value)
                 if isinstance(s, ast.Return):
                     break
@@ -147,6 +142,44 @@ def direct_cookie_observations(tree):
                 imports.clear()
     walk(tree.body, {})
     return findings
+
+def cookie_setting(call, key):
+    # Only name/value positional arguments are supported. Expanded or ambiguous
+    # arguments are explicitly unassessed, not assumed to be secure.
+    if len(call.args) > 2 or any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None for k in call.keywords):
+        return "unknown"
+    values = [k.value for k in call.keywords if k.arg == key]
+    if not values:
+        return "not_explicit"
+    if len(values) != 1 or not isinstance(values[0], ast.Constant):
+        return "unknown"
+    v = values[0].value
+    if key in {"secure", "httponly"}:
+        return "enabled" if v is True else "disabled" if v is False else "unknown"
+    if key == "samesite":
+        if v is None:
+            return "disabled"
+        if isinstance(v, str):
+            normalized = v.lower()
+            if normalized in {"strict", "lax"}:
+                return "restrictive"
+            if normalized == "none":
+                return "cross_site"
+    return "unknown"
+
+def cookie_control_observations(source):
+    tree = ast.parse(source)
+    allowed = observation_calls(tree)
+    return sorted([
+        {"line": call.lineno, "secure": cookie_setting(call, "secure"),
+         "httponly": cookie_setting(call, "httponly"),
+         "samesite": cookie_setting(call, "samesite")}
+        for call in recognized_cookie_calls(tree) if call in allowed
+    ], key=lambda row: row["line"])
+
+def direct_cookie_observations(tree):
+    return [call for call in recognized_cookie_calls(tree)
+            if cookie_setting(call, "secure") in {"disabled", "not_explicit"}]
 
 def inspect_source(source):
     tree = ast.parse(source)
@@ -309,15 +342,37 @@ def selftest():
         ("from pyramid.response import Response\nr=Response()\nr.set_cookie('id','x',secure=False)", [614]),
         ("from pyramid import httpexceptions as exc\nr=exc.HTTPFound()\nr.set_cookie('id','x',secure=True)", []),
     ])
+    control_cases = [
+        ("from flask import Response\nr=Response()\nr.set_cookie('id','x',secure=True,httponly=True,samesite='Strict')",
+         ("enabled","enabled","restrictive")),
+        ("from flask import Response\nResponse().set_cookie('id','x',secure=False,httponly=False,samesite=None)",
+         ("disabled","disabled","disabled")),
+        ("from flask import Response\nResponse().set_cookie('id','x')",
+         ("not_explicit","not_explicit","not_explicit")),
+        ("from flask import Response\nResponse().set_cookie('id','x',secure=flag,httponly=True,samesite='None')",
+         ("unknown","enabled","cross_site")),
+        ("from flask import Response\nResponse().set_cookie('id','x',**opts)",
+         ("unknown","unknown","unknown")),
+        ("from pyramid.response import Response\nResponse().set_cookie('id','x',secure=True,httponly=False,samesite='Lax')",
+         ("enabled","disabled","restrictive")),
+    ]
+    for source, expected in control_cases:
+        rows = cookie_control_observations(source)
+        assert len(rows) == 1
+        assert tuple(rows[0][k] for k in ("secure","httponly","samesite")) == expected
     for source, expected in cases:
         assert [f["cwe"] for f in inspect_source(source)] == expected, source
-    print(json.dumps({"passed": len(cases), "scope": "authored configuration review tests"}))
+    print(json.dumps({"passed": len(cases)+len(control_cases), "scope": "authored configuration review tests"}))
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["test"]:
         selftest()
+    elif len(sys.argv) == 4 and sys.argv[1] == "cookie-controls" and sys.argv[3] == "--authorized-local":
+        p = pathlib.Path(sys.argv[2])
+        rows = cookie_control_observations(_local_read(p))
+        print(json.dumps({"observations":rows, "notice":"Explicit settings only. Missing or unknown settings and unrecognized calls require review. Cookie sensitivity and deployment behavior are not established."},indent=2))
     elif len(sys.argv) == 4 and sys.argv[1] == "review" and sys.argv[3] == "--authorized-local":
         p = pathlib.Path(sys.argv[2])
         print(json.dumps(review_files(sorted(p.glob("*.py")) if p.is_dir() else [p]), indent=2))
     else:
-        raise SystemExit("Usage: python python-defaults-review.py test | review FILE_OR_DIRECTORY --authorized-local")
+        raise SystemExit("Usage: python python-defaults-review.py test | review FILE_OR_DIRECTORY --authorized-local | cookie-controls FILE --authorized-local")
