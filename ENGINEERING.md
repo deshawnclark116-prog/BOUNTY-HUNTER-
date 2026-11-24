@@ -87,3 +87,10 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - All 30 rule-order checks and 10 malformed rejection cases passed. Maximum-size model: 15,360 states. Both documented Cedar decisions matched; the remaining 10 states in the translated example were unspecified, not independent labels.
 - The first generator had correlated random draws and zero overlaps; corrected benchmark generator only and required nonzero overlap/mismatch coverage. Original engine unchanged.
 - Synthetic differential evidence is not a real-world vulnerability benchmark. Only two independently documented decisions were translated; no external authorization engine was executed. General application discovery performance remains unproven.
+
+## v0.9 exhaustive bounded conformance test
+- Frozen engine unchanged; benchmark commit 40e8ee06d482e2f7ffa77757c9725ada44f6332a.
+- Exhaustively enumerated 4,096 permit/deny masks over six states, each evaluated with three complete contracts and one empty contract: 16,384 model evaluations, 98,304 state evaluations, zero disagreements with closed-form bitmask expectations.
+- Maximum declared model: 15,360 states and 200 overlapping rules; 15,360 conflicts and 30,720 total findings correctly reported. Reversing rule and contract order produced identical results; sample input remained unchanged.
+- 20/20 malformed model inputs rejected. Total assertions 16,407, zero failures. Maximum model evaluation measured 923 ms in the test isolate (not a production performance guarantee).
+- This is synthetic conformance of a bounded policy verifier, not a vulnerability-discovery benchmark. No general application-security performance improvement or independent holdout claim.
