@@ -1,0 +1,41 @@
+name: OWASP Python offline analyzer baseline
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'benchmark/score_python.py'
+      - '.github/workflows/python-benchmark.yml'
+permissions:
+  contents: read
+jobs:
+  static-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: OWASP-Benchmark/BenchmarkPython
+          ref: f1291485808b66e20ddb6b01b10dc71b3df8c8ba
+          path: public-lab
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install bandit==1.8.6
+      - name: Static analysis of public lab only
+        run: |
+          mkdir -p benchmark-output
+          bandit --version
+          git -C public-lab rev-parse HEAD > benchmark-output/dataset-commit.txt
+          sha256sum public-lab/expectedresults-0.1.csv > benchmark-output/key-sha256.txt
+          bandit -r public-lab/testcode -f json -o benchmark-output/bandit.json --exit-zero
+          python benchmark/score_python.py public-lab/expectedresults-0.1.csv benchmark-output/bandit.json public-lab/testcode > benchmark-output/summary.json
+          cat benchmark-output/summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-benchmark-results
+          path: benchmark-output/summary.json
+          if-no-files-found: error
