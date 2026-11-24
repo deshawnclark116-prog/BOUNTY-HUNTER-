@@ -31,7 +31,7 @@ function benchmark(audit){
     return {findings,unknown,over,under,conflicts,matches};
   }
   let seed=0x21edcba1;
-  const rnd=n=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed%n};
+  const rnd=n=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return (seed>>>8)%n};
   let models=0,states=0,covered=0,unknown=0,over=0,under=0,conflicts=0,matches=0, failures=0;
   let orderChecks=0;
   const failureExamples=[];
@@ -49,7 +49,8 @@ function benchmark(audit){
   for(let i=0;i<300;i++){
     const m={...base,rules:[],contract:[]};
     const axes=domain(m);
-    for(let j=0;j<1+rnd(36);j++){
+    const ruleCount=1+rnd(36);
+    for(let j=0;j<ruleCount;j++){
       const values=axes.map(d=>rnd(4)===0?"*":d[rnd(d.length)]);
       m.rules.push({id:"r"+j,...row(values),effect:rnd(2)?"allow":"deny"});
     }
@@ -81,4 +82,4 @@ function benchmark(audit){
 }
 const results=benchmark(auditPolicy);
 console.log(JSON.stringify(results,null,2));
-if(results.failures||results.malformed_rejected!==results.malformed_total||results.documented_examples.correct!==results.documented_examples.total)process.exitCode=1;
+if(!results.expected_conflicts||!results.expected_overgrants||!results.expected_undergrants||results.failures||results.malformed_rejected!==results.malformed_total||results.documented_examples.correct!==results.documented_examples.total)process.exitCode=1;
