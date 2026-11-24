@@ -1,0 +1,43 @@
+name: Frozen Bandit TLS reference comparison
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bandit-tls-reference.yml'
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: PyCQA/bandit
+          ref: 2d0b675b04c80ae42277e10500db06a0a37bae17
+          path: upstream-bandit
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install bandit==1.8.6
+      - name: Freeze reviewers and compare source observations
+        run: |
+          git diff --exit-code d0d324fc2578d5f676a8f37a19c2bc22ddfe4dbb HEAD -- digest-review.py python-defaults-review.py source-policy.py
+          file=upstream-bandit/examples/requests-ssl-verify-disabled.py
+          bandit -t B501 -f json -o reference.json --exit-zero "$file"
+          python python-defaults-review.py review "$file" --authorized-local > candidate.json
+          python - <<'PY'
+          import json
+          r=json.load(open("reference.json"))
+          c=json.load(open("candidate.json"))
+          assert not r["errors"] and not c["errors"]
+          assert len(c["metrics"])==1
+          expected={x["line_number"] for x in r["results"] if x["test_id"]=="B501"}
+          actual={x["line_number"] for x in c["results"] if x["issue_cwe"]["id"]==295}
+          print(json.dumps({"reference_expected_count_from_functional_test":18,"bandit_reference_lines":len(expected),"candidate_lines":len(actual),"matched_lines":len(expected & actual),"reference_only_lines":len(expected-actual),"candidate_only_lines":len(actual-expected),"scope":"One previously uninspected public source fixture; comparator agreement only, not independent vulnerability truth or recall estimate."},indent=2))
+          PY
