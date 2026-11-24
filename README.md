@@ -1,6 +1,6 @@
 # Bounty Hunter
 
-A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.2, not an autonomous vulnerability hunter and not a source of guaranteed income.
+A zero-cost, offline-first bug bounty research starter. The goal is legitimate, verified findings, not scanner alerts or mass submissions. This is v0.3, not an autonomous vulnerability hunter and not a source of guaranteed income.
 
 ## Run (Node.js 20+)
 
@@ -48,3 +48,22 @@ node research.js ledger /path/to/private-ledger.json
 ```
 
 The benchmark checks expected vs observed boolean security controls in synthetic fixtures; null means unknown. It does not independently discover vulnerabilities. Ledger records use unique id, status, hours, cost_cents and payout_cents; only actually paid outcomes count as revenue. Keep real research records outside this public repo. The report checker validates completeness and self-attestations, not authenticity.
+
+## v0.3 defensive configuration review
+
+For businesses reviewing their own Kubernetes workloads or files explicitly provided for review, use the offline JSON manifest auditor. It requires a local regular file (maximum 2 MiB) and an explicit authorized-local flag. It does not connect to a cluster, run workloads, modify files, or send anything to a service.
+
+```sh
+node kube-review.js test
+node kube-review.js audit examples/kube-demo.json --authorized-local
+```
+
+Exit codes: 0 = no gaps in the implemented subset, 1 = invalid input or command, 3 = one or more policy gaps. A zero exit does not establish security or full compliance.
+
+Supported kinds: Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob. JSON only. Covers host namespaces, HostProcess, privileged mode, non-root requirements, UID, escalation, seccomp, Linux capability add/drop, and volume types, with pod-level inheritance and init/ephemeral container handling. Linux-only controls are excluded for explicitly Windows workloads. Output contains field paths and remediation, not manifest names, environment values, image names or raw secrets.
+
+Reference: https://kubernetes.io/docs/concepts/security/pod-security-standards/
+
+This is a partial static configuration check, not a schema validator, runtime security audit, or independent vulnerability discovery system. Policy gaps can be intentional and are not automatically bounty eligible. Review fixes in context with workload owners and test changes before rollout. Keep real manifests and outputs private.
+
+Regression: 25 authored scenarios, 19 expected gaps, 6 malformed inputs rejected. Independent evaluation remains outstanding.
