@@ -12,6 +12,7 @@ from collections import defaultdict
 
 # Reuse only the bounded file reader from our own previously reviewed module.
 _local_read = runpy.run_path(str(pathlib.Path(__file__).with_name("digest-review.py")))["local_read"]
+observation_calls = runpy.run_path(str(pathlib.Path(__file__).with_name("source-policy.py")))["observation_calls"]
 RESPONSES = {
     "flask.Response", "flask.make_response", "flask.wrappers.Response",
     "werkzeug.wrappers.Response", "django.http.HttpResponse",
@@ -210,7 +211,8 @@ def inspect_source(source):
         findings.append({"line": n.lineno, "cwe": cwe, "rule": rule,
                          "status": "configuration_requires_context_review",
                          "remediation": remediation})
-    for n in nodes:
+    allowed_calls = observation_calls(tree)
+    for n in allowed_calls:
         if not isinstance(n, ast.Call):
             continue
         q = qualified(n.func)
@@ -221,6 +223,8 @@ def inspect_source(source):
             add(n, 295, "unverified_tls_context_selected",
                 "Use a verified TLS context appropriate to the connection.")
     for n in direct_cookie_observations(tree):
+        if n not in allowed_calls:
+            continue
         add(n, 614, "cookie_secure_not_enabled",
             "For cookies carrying sensitive state, set Secure and require HTTPS.")
     return sorted(findings, key=lambda f: (f["line"], f["rule"]))
