@@ -22,3 +22,9 @@ jobs:
           test "$status" -eq 2
       - run: node research.js test
       - run: node research.js benchmark
+      - run: node kube-review.js test
+      - run: |
+          set +e
+          node kube-review.js audit examples/kube-demo.json --authorized-local
+          status=$?
+          test "$status" -eq 3
