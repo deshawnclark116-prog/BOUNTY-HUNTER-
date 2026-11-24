@@ -103,3 +103,9 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - Run: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45324430903
 
 - Verified GitHub Actions job 138210486032: 61 external request labels across the selected 17 suites; 31 evaluated and correct, 0 incorrect, 30 unsupported. 16 allow and 15 deny labels among evaluated requests, zero unexpected grants or denials. Supported-case accuracy 100%, selected-suite coverage 50.82%. These results concern translated policy conformance only, not independent vulnerability discovery. The engine itself was unchanged. G2 remains unmet.
+
+## v0.10 conditional policy model
+- First-party verifier conditional-policy.js, commit 5bfd2b2107e6499c656c48ce85b775b7ba4a79b0. 33 authored checks passed. Bounded declarative conditions, typed comparison, attribute paths, list membership, boolean composition and explicit unknown semantics; no dynamic code execution.
+- Eight previously unsupported public Cedar fixture suites translated into explicit local contracts and conditions in benchmark/cedar-conditional.js. Translation uses public source policy definitions and fixture entity facts; expected labels are comparison contracts only. This is a known development set, not a fresh holdout.
+- Verified run https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45324816722, job 138211762969, both stages passed. Conditional stage: 30/30 correct, 17 allow, 13 deny, zero incorrect/unknown. Earlier finite-model stage: 31/31 correct. Together the two verifiers and fixture-specific adapters cover 61/61 decisions in the selected 17 suites. No general Cedar parser or complete Cedar language support is claimed.
+- Scope: explicit owner-provided local models only. External benchmark demonstrates policy conformance, not vulnerability discovery in application implementations. G2 remains unmet; fresh independent validation required.
