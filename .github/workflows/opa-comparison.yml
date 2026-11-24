@@ -5,6 +5,8 @@ on:
     paths:
       - conditional-policy.js
       - benchmark/opa-compare.js
+      - benchmark/profile-threeway.js
+      - benchmark/casbin-profile.py
       - .github/workflows/opa-comparison.yml
 permissions:
   contents: read
@@ -22,7 +24,9 @@ jobs:
           ref: 7b037a97dd9b465dedb1c565f778ea06ac5569ea
           path: opa-reference
           persist-credentials: false
-          sparse-checkout: docs/docs/http-api-authorization.md
+          sparse-checkout: |
+            docs/docs/http-api-authorization.md
+            docs/docs/policy-testing.md
           sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
@@ -41,3 +45,10 @@ jobs:
         run: |
           opa version
           node benchmark/opa-compare.js opa-reference/docs/docs/http-api-authorization.md
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned second comparison engine
+        run: python -m pip install casbin==1.36.0
+      - name: Compare three engines on independent profile example
+        run: node benchmark/profile-threeway.js opa-reference/docs/docs/policy-testing.md
