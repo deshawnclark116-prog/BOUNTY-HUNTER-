@@ -32,7 +32,7 @@ CERT_CALLS = {
 }
 UNKNOWN = object()
 
-def recognized_cookie_calls(tree):
+def recognized_cookie_calls(tree, include_framework_inference=False):
     """Bounded lexical, straight-line review of response construction."""
     def local_bindings(body, args=None):
         counts = defaultdict(int)
@@ -87,6 +87,9 @@ def recognized_cookie_calls(tree):
             return values.get(node.id)
         if isinstance(node, ast.Call):
             return qname(node.func, imports)
+        if include_framework_inference and isinstance(node, ast.Attribute) and node.attr == "response" and isinstance(node.value, ast.Name):
+            if values.get(node.value.id) == "pyramid.request.Request":
+                return "pyramid.response.Response"
         return None
 
     def recognized_cookie(call, imports, values):
@@ -95,10 +98,12 @@ def recognized_cookie_calls(tree):
                 and response(call.func.value, imports, values) in RESPONSES)
 
     findings = []
-    def walk(body, inherited, args=None):
+    def walk(body, inherited, args=None, request_param=None):
         counts = local_bindings(body, args)
         imports = {k:v for k,v in inherited.items() if k not in counts}
         values = {}
+        if request_param is not None and counts.get(request_param, 0) == 1:
+            values[request_param] = "pyramid.request.Request"
         if any(isinstance(n, (ast.Global, ast.Nonlocal)) or
                isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names)
                for s in body for n in ast.walk(s)):
@@ -106,7 +111,14 @@ def recognized_cookie_calls(tree):
         for s in body:
             if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 stable = {k:v for k,v in imports.items() if counts.get(k, 0) <= 1}
-                walk(s.body, stable, s.args)
+                request_param = None
+                if include_framework_inference:
+                    decorators = [d.func if isinstance(d, ast.Call) else d for d in s.decorator_list]
+                    positional = [*s.args.posonlyargs, *s.args.args]
+                    if len(positional) == 1 and not s.args.vararg and not s.args.kwarg and not s.args.kwonlyargs and not s.args.defaults:
+                        if any(qname(d, imports) == "pyramid.view.view_config" for d in decorators):
+                            request_param = positional[0].arg
+                walk(s.body, stable, s.args, request_param)
                 imports.pop(s.name, None)
                 values.pop(s.name, None)
                 continue
@@ -132,7 +144,7 @@ def recognized_cookie_calls(tree):
                 resolved = response(s.value, imports, values)
                 imports.pop(k, None)
                 values.pop(k, None)
-                if isinstance(s.value, ast.Call) and resolved in RESPONSES:
+                if resolved in RESPONSES and (isinstance(s.value, ast.Call) or include_framework_inference and isinstance(s.value, (ast.Attribute, ast.Name))):
                     values[k] = resolved
                 continue
             values.clear()
@@ -170,11 +182,14 @@ def cookie_setting(call, key):
 def cookie_control_observations(source):
     tree = ast.parse(source)
     allowed = observation_calls(tree)
+    direct = set(recognized_cookie_calls(tree))
     return sorted([
-        {"line": call.lineno, "end_line": call.end_lineno, "secure": cookie_setting(call, "secure"),
+        {"line": call.lineno, "end_line": call.end_lineno,
+         "provenance": "direct_constructor" if call in direct else "framework_or_alias_inference",
+         "secure": cookie_setting(call, "secure"),
          "httponly": cookie_setting(call, "httponly"),
          "samesite": cookie_setting(call, "samesite")}
-        for call in recognized_cookie_calls(tree) if call in allowed
+        for call in recognized_cookie_calls(tree, include_framework_inference=True) if call in allowed
     ], key=lambda row: row["line"])
 
 def direct_cookie_observations(tree):
@@ -356,13 +371,25 @@ def selftest():
         ("from pyramid.response import Response\nResponse().set_cookie('id','x',secure=True,httponly=False,samesite='Lax')",
          ("enabled","disabled","restrictive")),
     ]
+    inferred_cases = [
+        ("from pyramid.view import view_config\n@view_config(route_name='demo')\ndef view(req):\n r=req.response\n r.set_cookie('demo','x',httponly=False)", 1),
+        ("from pyramid.view import view_config as v\n@v()\ndef view(req):\n r=req.response\n copy=r\n copy.set_cookie('demo','x')", 1),
+        ("def view(req):\n r=req.response\n r.set_cookie('demo','x')", 0),
+        ("from pyramid.view import view_config\n@view_config()\ndef view(req):\n req=other\n r=req.response\n r.set_cookie('demo','x')", 0),
+        ("from pyramid.view import view_config\n@view_config()\ndef view(req, other):\n req.response.set_cookie('demo','x')", 0),
+    ]
+    for source, expected in inferred_cases:
+        rows = cookie_control_observations(source)
+        assert len(rows) == expected, source
+        assert all(row["provenance"]=="framework_or_alias_inference" for row in rows)
+        assert not inspect_source(source), "Do not silently promote inferred provenance into legacy vulnerability labels"
     for source, expected in control_cases:
         rows = cookie_control_observations(source)
         assert len(rows) == 1
         assert tuple(rows[0][k] for k in ("secure","httponly","samesite")) == expected
     for source, expected in cases:
         assert [f["cwe"] for f in inspect_source(source)] == expected, source
-    print(json.dumps({"passed": len(cases)+len(control_cases), "scope": "authored configuration review tests"}))
+    print(json.dumps({"passed": len(cases)+len(control_cases)+len(inferred_cases), "scope": "authored configuration review tests"}))
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["test"]:
