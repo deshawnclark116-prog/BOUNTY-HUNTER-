@@ -1,0 +1,30 @@
+name: Frozen cookie control fixture evaluation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/cookie-control-holdout.yml'
+permissions:
+  contents: read
+jobs:
+  holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: semgrep/semgrep-rules
+          ref: a5ad1714f00c9f7fde980cab0ea1d6dc6d414fd2
+          path: upstream-fixtures
+          sparse-checkout: python/pyramid/audit
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: git diff --exit-code 10946a803e14c3baa3587e1ab3284d82bc391351 HEAD -- python-defaults-review.py digest-review.py source-policy.py
+      - run: python python-defaults-review.py test
+      - run: python benchmark/cookie-control-holdout.py upstream-fixtures
