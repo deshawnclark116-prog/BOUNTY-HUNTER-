@@ -1,0 +1,20 @@
+{
+  "environment": "synthetic_local",
+  "cookies": [
+    {
+      "session": true,
+      "secure": false,
+      "httpOnly": false,
+      "sameSite": "Lax"
+    },
+    {
+      "session": true,
+      "secure": true,
+      "httpOnly": true,
+      "sameSite": "Strict"
+    },
+    {
+      "session": false
+    }
+  ]
+}
