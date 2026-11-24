@@ -62,3 +62,10 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 
 - First comparison attempt failed before analysis: the pinned Semgrep release imported pkg_resources, absent from the runner's environment. No score exists for that attempt.
 - Environment-only correction: setuptools 80.9.0 pinned; analyzer, rule snapshot, dataset and scoring unchanged. Corrected run: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45321752484
+
+## v0.7: verified second baseline and business remediation
+- Corrected Semgrep run succeeded: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45321752484
+- TP 71, TN 705, FP 73, FN 381, errors 0. Precision 49.31%, recall 15.71%, coverage 100%. 296 non-target case/CWE alerts and 2,914 alerts without mapped CWE metadata are not adjudicated.
+- Bandit remains the stronger overall standalone baseline on this exact-CWE metric. Neither meets application-security gates.
+- Public-lab comparison experiment: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45322132797 . Both reports scored separately and via union/intersection only for jointly evaluated cases. This is descriptive lab evidence, not a promoted production detector.
+- Local remediation tracker added, 19 authored assertions passed. It separates unreviewed alerts from human-confirmed issues and requires separate dated retest evidence to record a repair as resolved. Evidence attestations are not independently authenticated. Aggregate output omits identifiers and source/evidence data.
