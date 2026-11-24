@@ -1,0 +1,54 @@
+name: OWASP Python second analyzer baseline
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'benchmark/score_semgrep.py'
+      - '.github/workflows/semgrep-benchmark.yml'
+permissions:
+  contents: read
+jobs:
+  public-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SEMGREP_SEND_METRICS: 'off'
+      SEMGREP_ENABLE_VERSION_CHECK: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: OWASP-Benchmark/BenchmarkPython
+          ref: f1291485808b66e20ddb6b01b10dc71b3df8c8ba
+          path: public-lab
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: semgrep/semgrep-rules
+          ref: a5ad1714f00c9f7fde980cab0ea1d6dc6d414fd2
+          path: public-rules
+          persist-credentials: false
+          sparse-checkout: python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install semgrep==1.130.0
+      - name: Freeze rule input
+        run: |
+          mkdir -p benchmark-output
+          git -C public-lab rev-parse HEAD > benchmark-output/dataset-commit.txt
+          git -C public-rules rev-parse HEAD > benchmark-output/rules-commit.txt
+          semgrep --version
+      - name: Analyze public benchmark source without execution
+        run: |
+          semgrep scan --config public-rules/python --metrics off --disable-version-check --no-git-ignore --json --output benchmark-output/semgrep.json public-lab/testcode
+          python benchmark/score_semgrep.py public-lab/expectedresults-0.1.csv benchmark-output/semgrep.json public-lab/testcode > benchmark-output/summary.json
+          cat benchmark-output/summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-lab-results
+          path: benchmark-output/
+          if-no-files-found: warn
