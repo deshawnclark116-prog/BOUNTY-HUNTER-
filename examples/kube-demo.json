@@ -1,0 +1,33 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "demo-local"
+  },
+  "spec": {
+    "template": {
+      "spec": {
+        "securityContext": {
+          "runAsNonRoot": true,
+          "seccompProfile": {
+            "type": "RuntimeDefault"
+          }
+        },
+        "containers": [
+          {
+            "name": "demo",
+            "image": "example.invalid/demo:1",
+            "securityContext": {
+              "allowPrivilegeEscalation": true,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
