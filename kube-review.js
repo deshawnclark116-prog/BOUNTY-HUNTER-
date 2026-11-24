@@ -10,15 +10,40 @@ function audit(doc){
   obj(doc,"manifest");
   const groups={Pod:["v1"],Deployment:["apps/v1"],StatefulSet:["apps/v1"],DaemonSet:["apps/v1"],ReplicaSet:["apps/v1"],Job:["batch/v1"],CronJob:["batch/v1"]};
   if(!Object.hasOwn(groups,doc.kind)||!groups[doc.kind].includes(doc.apiVersion))throw Error("Unsupported workload kind or API version");
-  let s=doc.spec,base="spec";
-  if(doc.kind==="CronJob"){s=s?.jobTemplate?.spec?.template?.spec;base+=".jobTemplate.spec.template.spec"}
-  else if(doc.kind!=="Pod"){s=s?.template?.spec;base+=".template.spec"}
+  let s=doc.spec,base="spec",meta=doc.metadata,metaPath="metadata";
+  if(doc.kind==="CronJob"){meta=s?.jobTemplate?.spec?.template?.metadata;metaPath="spec.jobTemplate.spec.template.metadata";s=s?.jobTemplate?.spec?.template?.spec;base+=".jobTemplate.spec.template.spec"}
+  else if(doc.kind!=="Pod"){meta=s?.template?.metadata;metaPath="spec.template.metadata";s=s?.template?.spec;base+=".template.spec"}
   obj(s,"pod spec");
   const p=opt(s.securityContext,"pod securityContext"),os=opt(s.os,"os").name;
   if(os!=null&&!["linux","windows"].includes(os))throw Error("Unsupported OS");
   const checks=[],skipped=[];
   function record(id,path,pass,fix){checks.push({id,path,result:pass?"pass":"policy_gap",remediation:pass?null:fix})}
+  const str=(v,label)=>{if(v!=null&&typeof v!=="string")throw Error("Invalid "+label);return v??""};
+  const profiles=(c,path)=>{
+    if(c.appArmorProfile!=null){
+      const a=obj(c.appArmorProfile,"AppArmor profile");
+      record("APPARMOR",path+".appArmorProfile.type",["RuntimeDefault","Localhost"].includes(str(a.type,"AppArmor type")),"Use RuntimeDefault or an approved Localhost profile.");
+    }
+    if(c.seLinuxOptions!=null){
+      const se=obj(c.seLinuxOptions,"SELinux options");
+      record("SELINUX",path+".seLinuxOptions",["","container_t","container_init_t","container_kvm_t"].includes(str(se.type,"SELinux type"))&&!str(se.user,"SELinux user")&&!str(se.role,"SELinux role"),"Use an approved container SELinux type and omit custom user and role.");
+    }
+  };
+  const annotations=opt(opt(meta,"pod metadata").annotations,"pod annotations");
+  let annotationIndex=0;
+  for(const [key,value] of Object.entries(annotations)){
+    if(typeof value!=="string")throw Error("Invalid annotation value");
+    if(key.startsWith("container.apparmor.security.beta.kubernetes.io/")){
+      record("APPARMOR",metaPath+".annotations[AppArmor:"+annotationIndex+++"]",value===""||value==="runtime/default"||value.startsWith("localhost/"),"Use the runtime default or approved local AppArmor profile.");
+    }
+  }
+  const safeSysctls=new Set(["kernel.shm_rmid_forced","net.ipv4.ip_local_port_range","net.ipv4.tcp_syncookies","net.ipv4.ping_group_range","net.ipv4.ip_unprivileged_port_start","net.ipv4.ip_local_reserved_ports","net.ipv4.tcp_keepalive_time","net.ipv4.tcp_fin_timeout","net.ipv4.tcp_keepalive_intvl","net.ipv4.tcp_keepalive_probes"]);
+  for(const [i,item] of (p.sysctls==null?[]:arr(p.sysctls,"sysctls")).entries()){
+    const sys=obj(item,"sysctl");
+    record("SYSCTL",base+".securityContext.sysctls["+i+"].name",safeSysctls.has(str(sys.name,"sysctl name")),"Use only Kubernetes v1.29 Restricted-policy allowed sysctls.");
+  }
   const ctx=(c,path)=>{
+    profiles(c,path);
     for(const k of ["privileged","runAsNonRoot","allowPrivilegeEscalation"])bool(c[k],path+"."+k);
     if(c.runAsUser!=null&&(!Number.isSafeInteger(c.runAsUser)||c.runAsUser<0))throw Error("Invalid runAsUser");
     const w=opt(c.windowsOptions,"windowsOptions");bool(w.hostProcess,"hostProcess");
@@ -35,8 +60,8 @@ function audit(doc){
   const allowed=["configMap","csi","downwardAPI","emptyDir","ephemeral","persistentVolumeClaim","projected","secret"];
   for(let i=0;i<vols.length;i++){
     const v=obj(vols[i],"volume"),types=Object.keys(v).filter(k=>k!=="name"&&v[k]!=null);
-    if(types.length!==1)throw Error("Volume must specify exactly one source");
-    record("VOLUME_TYPE",base+".volumes["+i+"]",allowed.includes(types[0]),"Use a Restricted-profile volume type or document an exception.");
+    if(types.length>1)throw Error("Volume must specify at most one source");
+    record("VOLUME_TYPE",base+".volumes["+i+"]",types.length===0||allowed.includes(types[0]),"Use a Restricted-profile volume type or document an exception.");
   }
   const linux=os!=="windows";
   if(linux)record("POD_SECCOMP",base+".securityContext.seccompProfile",pp.sec.type!=="Unconfined","Use RuntimeDefault or an approved Localhost profile.");
@@ -45,6 +70,12 @@ function audit(doc){
     if(group==="containers"&&!cs.length)throw Error("No containers");
     for(let i=0;i<cs.length;i++){
       const c=obj(cs[i],"container"),q=opt(c.securityContext,"container securityContext"),path=base+"."+group+"["+i+"].securityContext",a=ctx(q,path);
+      if(q.procMount!=null)record("PROC_MOUNT",path+".procMount",str(q.procMount,"procMount")==="Default","Use the default masked proc filesystem.");
+      for(const [j,port] of (c.ports==null?[]:arr(c.ports,"ports")).entries()){
+        const hostPort=obj(port,"port").hostPort??0;
+        if(!Number.isInteger(hostPort)||hostPort<0||hostPort>65535)throw Error("Invalid hostPort");
+        record("HOST_PORT",base+"."+group+"["+i+"].ports["+j+"].hostPort",hostPort===0,"Avoid binding host ports directly; use an approved service configuration.");
+      }
       record("PRIVILEGED",path+".privileged",q.privileged!==true,"Set privileged to false or remove it.");
       record("HOST_PROCESS",path+".windowsOptions.hostProcess",a.w.hostProcess!==true,"Disable Windows HostProcess.");
       record("NONROOT",path+".runAsNonRoot",(q.runAsNonRoot??p.runAsNonRoot)===true,"Require non-root at container or pod level.");
@@ -56,7 +87,7 @@ function audit(doc){
       record("CAP_ADD",path+".capabilities.add",list(a.cap.add,"add").every(x=>x==="NET_BIND_SERVICE"),"Remove added capabilities except NET_BIND_SERVICE if necessary.");
     }
   }
-  return {kind:doc.kind,profile:"subset of Kubernetes Restricted Pod Security Standards",status:"STATIC_CONFIGURATION_REVIEW",checks,findings:checks.filter(x=>x.result==="policy_gap"),skipped,notice:"Declared manifest only; not a complete standards validator, runtime assessment, vulnerability proof or bounty claim. Verify deployment context before changes."};
+  return {kind:doc.kind,profile:"subset of Kubernetes v1.29 Restricted Pod Security Standards",status:"STATIC_CONFIGURATION_REVIEW",checks,findings:checks.filter(x=>x.result==="policy_gap"),skipped,notice:"Declared manifest only; not a complete standards validator, runtime assessment, vulnerability proof or bounty claim. Verify deployment context before changes."};
 }
 function fixtures(){
  const clean={apiVersion:"v1",kind:"Pod",spec:{os:{name:"linux"},securityContext:{runAsNonRoot:true,runAsUser:1000,seccompProfile:{type:"RuntimeDefault"}},containers:[{name:"app",image:"example.invalid/app",securityContext:{allowPrivilegeEscalation:false,capabilities:{drop:["ALL"]}}}]}};
@@ -89,6 +120,12 @@ function fixtures(){
  add("windows host process",m=>{m.spec.os.name="windows";q(m).windowsOptions={hostProcess:true}},["HOST_PROCESS"],1);
  add("deployment template",m=>{m.kind="Deployment";m.apiVersion="apps/v1";m.spec={template:{spec:m.spec}}},[]);
  add("cronjob template",m=>{m.kind="CronJob";m.apiVersion="batch/v1";m.spec={jobTemplate:{spec:{template:{spec:m.spec}}}}},[]);
+ add("defaulted volume source",m=>m.spec.volumes=[{name:"temp"}],[]);
+ add("AppArmor default",m=>q(m).appArmorProfile={type:"RuntimeDefault"},[]);
+ add("SELinux default",m=>q(m).seLinuxOptions={type:"container_t"},[]);
+ add("default proc mount",m=>q(m).procMount="Default",[]);
+ add("zero host port",m=>m.spec.containers[0].ports=[{containerPort:80,hostPort:0}],[]);
+ add("approved sysctl",m=>m.spec.securityContext.sysctls=[{name:"net.ipv4.tcp_keepalive_time",value:"60"}],[]);
  return cases;
 }
 function selftest(){
