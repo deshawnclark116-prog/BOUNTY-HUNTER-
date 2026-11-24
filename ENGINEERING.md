@@ -30,3 +30,6 @@ v0.2: 26 additional assertions, including 48 deterministic truth-table cases (16
 - Bugcrowd submission limits: https://docs.bugcrowd.com/researchers/reporting-managing-submissions/reporting-a-bug/submissions-limit/
 
 Read current official rules for each program and follow the stricter applicable terms.
+
+## v0.3 defensive audit milestone
+Added a local Kubernetes manifest reviewer grounded in a subset of the official Restricted Pod Security Standards. 25 authored fixture cases matched expected findings, including inheritance and OS-specific behavior; 6 malformed cases rejected. These are development regressions, not an independent holdout. G2 remains unmet. The module provides configuration guidance for owners or explicitly authorized reviewers, not exploitability assessments. No live testing or submission added.
