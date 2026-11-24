@@ -52,3 +52,10 @@ Added a local Kubernetes manifest reviewer grounded in a subset of the official 
 - Results: TP 108, TN 753, FP 25, FN 344, errors 0; precision 81.20%, recall 23.89%, specificity 96.79%, coverage 100%.
 - Four categories had exact-CWE true positives; ten did not. This is an existing-tool baseline, not a novel detector. G2 application-security targets are not met.
 - Future defensive assessment research: compare established static analyzers under identical source-only conditions and evaluate repair guidance, with a separate independent holdout before claiming improvements. Preserve all results including failures and do not tune against the full public answer key.
+
+## v0.6 experiment: second established source analyzer
+- Candidate: unmodified Semgrep Community Edition 1.130.0 with the Python portion of semgrep-rules pinned to a5ad1714f00c9f7fde980cab0ea1d6dc6d414fd2.
+- Same OWASP Python lab source and exact-case/exact-CWE evaluator as v0.5. Only static analysis of the public lab; no application execution, live targets or automated submissions.
+- Normalization preserves distinct CWE IDs from published rule metadata; findings without CWE metadata are counted separately, and unattributed analysis errors invalidate the score rather than silently being treated as negatives.
+- Comparison workflow: https://github.com/deshawnclark116-prog/BOUNTY-HUNTER-/actions/runs/45321685819
+- Predeclared interpretation: report each analyzer separately, including coverage and unadjudicated alerts. This public benchmark is not a fresh holdout for a combined candidate selected using its results. Do not claim real-world detection or bounty profitability.
