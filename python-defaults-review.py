@@ -171,7 +171,7 @@ def cookie_control_observations(source):
     tree = ast.parse(source)
     allowed = observation_calls(tree)
     return sorted([
-        {"line": call.lineno, "secure": cookie_setting(call, "secure"),
+        {"line": call.lineno, "end_line": call.end_lineno, "secure": cookie_setting(call, "secure"),
          "httponly": cookie_setting(call, "httponly"),
          "samesite": cookie_setting(call, "samesite")}
         for call in recognized_cookie_calls(tree) if call in allowed
