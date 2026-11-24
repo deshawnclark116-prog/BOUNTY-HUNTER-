@@ -21,12 +21,13 @@ function benchmark(review){
    const sequence=seq+(random(7)===0?2:1);
    const contiguous=sequence===seq+1;
    let mismatch=contiguous&&last!==null&&before!==null&&last!==before;
-   if(before!==null&&after!==null&&outcome!==null){
-    if(outcome==="rejected")mismatch ||= before!==after;
+   if(before!==null&&outcome!==null){
+    if(outcome==="rejected")mismatch ||= after!==null&&before!==after;
     else {
-     const good=before==="pending"&&event==="check"&&role==="staff"&&after==="checked"||
-       before==="checked"&&role==="supervisor"&&((event==="close"&&after==="closed")||(event==="reopen"&&after==="pending"));
-     mismatch ||= !good;
+     const outcomes=before==="pending"&&role==="staff"&&event==="check"?["checked"]:
+       before==="checked"&&role==="supervisor"&&event==="close"?["closed"]:
+       before==="checked"&&role==="supervisor"&&event==="reopen"?["pending"]:[];
+     mismatch ||= !outcomes.length||(after!==null&&!outcomes.includes(after));
     }
    }
    const status=mismatch?"inconsistent":!contiguous||last===null||before===null||after===null||outcome===null?"unknown":"consistent";
