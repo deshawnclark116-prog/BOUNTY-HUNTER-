@@ -1,0 +1,22 @@
+name: Configuration review challenge
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'digest-review.py'
+      - 'python-defaults-review.py'
+      - 'benchmark/configuration-challenge.py'
+      - '.github/workflows/configuration-challenge.yml'
+permissions:
+  contents: read
+jobs:
+  challenge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python benchmark/configuration-challenge.py
