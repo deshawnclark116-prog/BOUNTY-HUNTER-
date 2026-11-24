@@ -58,7 +58,7 @@ function reviewReport(r){
   for(const k of flags)if(r?.[k]!==true)missing.push(k);
   if(r?.environment!=="authorized_research")missing.push("authorized_research environment");
   if(r?.practice_only!==false)missing.push("practice_only must be false");
-  return {status:missing.length?"BLOCKED":"READY_FOR_HUMAN_SUBMISSION_DECISION",missing,notice:"Checklist only; assertions are not independently authenticated. No submission or live testing."};
+  return {status:missing.length?"BLOCKED":"CHECKLIST_COMPLETE_UNVERIFIED",missing,notice:"Checklist only; assertions are not independently authenticated. Completion never establishes report readiness, authorization or human approval. No submission or live testing."};
 }
 function selftest(){
   let n=0;const check=(x,m)=>{if(!x)throw Error(m);n++};const throws=(f,m)=>{let ok=false;try{f()}catch{ok=true}check(ok,m)};
@@ -71,7 +71,7 @@ function selftest(){
   for(const k of ["official_policy_reference","authorized_scope_reference","evidence_reference","expected_behavior","observed_behavior","demonstrated_impact","remediation","reviewer"])r[k]="synthetic placeholder for test only";
   const flags=["current_policy_checked","participation_confirmed","scope_confirmed","method_permitted","ai_policy_compliant","evidence_independently_verified","privacy_redacted","duplicate_check_complete","human_approved"];
   for(const k of flags)r[k]=true;
-  check(reviewReport(r).status==="READY_FOR_HUMAN_SUBMISSION_DECISION","complete checklist");
+  check(reviewReport(r).status==="CHECKLIST_COMPLETE_UNVERIFIED","complete checklist");
   for(const k of flags)check(reviewReport({...r,[k]:false}).status==="BLOCKED",k);
   check(reviewReport({...r,practice_only:true}).status==="BLOCKED","practice blocked");
   check(reviewReport(null).status==="BLOCKED","empty report");
