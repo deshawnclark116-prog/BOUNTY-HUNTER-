@@ -1,0 +1,116 @@
+{
+  "schema_version": 2,
+  "environment": "local_policy_design",
+  "authorization": "owner_or_explicit_permission",
+  "rules": [
+    {
+      "id": "departmentRead",
+      "role": "employee",
+      "action": "read",
+      "resource": "record",
+      "effect": "allow",
+      "when": {
+        "op": "and",
+        "args": [
+          {
+            "op": "eq",
+            "left": {
+              "path": [
+                "principal",
+                "department"
+              ]
+            },
+            "right": {
+              "path": [
+                "resource",
+                "department"
+              ]
+            }
+          },
+          {
+            "op": "gte",
+            "left": {
+              "path": [
+                "principal",
+                "level"
+              ]
+            },
+            "right": {
+              "literal": 5
+            }
+          },
+          {
+            "op": "eq",
+            "left": {
+              "path": [
+                "context",
+                "authenticated"
+              ]
+            },
+            "right": {
+              "literal": true
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "approved",
+      "role": "employee",
+      "action": "read",
+      "resource": "record",
+      "attributes": {
+        "principal": {
+          "department": "A",
+          "level": 5
+        },
+        "resource": {
+          "department": "A"
+        },
+        "context": {
+          "authenticated": true
+        }
+      },
+      "expected": "allow"
+    },
+    {
+      "id": "differentDepartment",
+      "role": "employee",
+      "action": "read",
+      "resource": "record",
+      "attributes": {
+        "principal": {
+          "department": "B",
+          "level": 5
+        },
+        "resource": {
+          "department": "A"
+        },
+        "context": {
+          "authenticated": true
+        }
+      },
+      "expected": "deny"
+    },
+    {
+      "id": "insufficientInformation",
+      "role": "employee",
+      "action": "read",
+      "resource": "record",
+      "attributes": {
+        "principal": {
+          "department": "A"
+        },
+        "resource": {
+          "department": "A"
+        },
+        "context": {
+          "authenticated": true
+        }
+      },
+      "expected": null
+    }
+  ]
+}
