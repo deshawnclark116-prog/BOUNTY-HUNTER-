@@ -1,0 +1,33 @@
+name: External configuration development regression
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'benchmark/external-config-holdout.py'
+      - '.github/workflows/external-config-regression.yml'
+      - 'python-defaults-review.py'
+      - 'digest-review.py'
+      - 'source-policy.py'
+permissions:
+  contents: read
+jobs:
+  holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: semgrep/semgrep-rules
+          ref: a5ad1714f00c9f7fde980cab0ea1d6dc6d414fd2
+          path: upstream-fixtures
+          sparse-checkout: python
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python python-defaults-review.py test
+      - run: python benchmark/external-config-holdout.py upstream-fixtures
