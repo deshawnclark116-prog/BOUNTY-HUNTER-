@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install semgrep==1.130.0
+      - run: python -m pip install setuptools==80.9.0 semgrep==1.130.0
       - name: Freeze rule input
         run: |
           mkdir -p benchmark-output
