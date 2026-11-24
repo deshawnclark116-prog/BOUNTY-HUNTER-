@@ -1,0 +1,43 @@
+name: Independent OPA policy comparison
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - conditional-policy.js
+      - benchmark/opa-compare.js
+      - .github/workflows/opa-comparison.yml
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: open-policy-agent/opa
+          ref: 7b037a97dd9b465dedb1c565f778ea06ac5569ea
+          path: opa-reference
+          persist-credentials: false
+          sparse-checkout: docs/docs/http-api-authorization.md
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned OPA comparison executable
+        run: |
+          mkdir -p "$RUNNER_TEMP/opa-bin"
+          cd "$RUNNER_TEMP/opa-bin"
+          curl --fail --silent --show-error --location -O https://github.com/open-policy-agent/opa/releases/download/v1.4.2/opa_linux_amd64_static
+          curl --fail --silent --show-error --location -O https://github.com/open-policy-agent/opa/releases/download/v1.4.2/opa_linux_amd64_static.sha256
+          sha256sum --check opa_linux_amd64_static.sha256
+          mv opa_linux_amd64_static opa
+          chmod +x opa
+          echo "$RUNNER_TEMP/opa-bin" >> "$GITHUB_PATH"
+      - name: Compare local policy decisions
+        run: |
+          opa version
+          node benchmark/opa-compare.js opa-reference/docs/docs/http-api-authorization.md
