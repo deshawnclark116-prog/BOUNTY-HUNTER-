@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "environment": "local_policy_design",
+  "authorization": "owner_or_explicit_permission",
+  "roles": [
+    "member"
+  ],
+  "actions": [
+    "view"
+  ],
+  "resources": [
+    "profile"
+  ],
+  "rules": [
+    {
+      "id": "owner-read",
+      "role": "member",
+      "action": "view",
+      "resource": "profile",
+      "relationship": "own",
+      "auth": "authenticated",
+      "effect": "allow"
+    }
+  ],
+  "contract": [
+    {
+      "role": "member",
+      "action": "view",
+      "resource": "profile",
+      "relationship": "own",
+      "auth": "authenticated",
+      "expected": "allow"
+    },
+    {
+      "role": "member",
+      "action": "view",
+      "resource": "profile",
+      "relationship": "own",
+      "auth": "anonymous",
+      "expected": "deny"
+    },
+    {
+      "role": "member",
+      "action": "view",
+      "resource": "profile",
+      "relationship": "same_tenant",
+      "auth": "authenticated",
+      "expected": "deny"
+    },
+    {
+      "role": "member",
+      "action": "view",
+      "resource": "profile",
+      "relationship": "same_tenant",
+      "auth": "anonymous",
+      "expected": "deny"
+    },
+    {
+      "role": "member",
+      "action": "view",
+      "resource": "profile",
+      "relationship": "other_tenant",
+      "auth": "authenticated",
+      "expected": "deny"
+    },
+    {
+      "role": "member",
+      "action": "view",
+      "resource": "profile",
+      "relationship": "other_tenant",
+      "auth": "anonymous",
+      "expected": "deny"
+    }
+  ]
+}
