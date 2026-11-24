@@ -45,13 +45,13 @@ function reviewConditions(model){
  function all(xs){return xs.includes(false)?false:xs.includes(U)?U:true}
  function any(xs){return xs.includes(true)?true:xs.includes(U)?U:false}
  const not=x=>x===U?U:!x;
- function evaluate(e,attrs){
-  if(e.op==="and")return all(e.args.map(x=>evaluate(x,attrs)));
-  if(e.op==="or")return any(e.args.map(x=>evaluate(x,attrs)));
-  if(e.op==="not")return not(evaluate(e.arg,attrs));
+ function evaluate(e,attrs,abstract){
+  if(e.op==="and")return all(e.args.map(x=>evaluate(x,attrs,abstract)));
+  if(e.op==="or")return any(e.args.map(x=>evaluate(x,attrs,abstract)));
+  if(e.op==="not")return not(evaluate(e.arg,attrs,abstract));
   if(e.op==="exists")return get(e.value,attrs)!==missing;
   const l=get(e.left,attrs),r=get(e.right,attrs);
-  if(l===missing||r===missing)return U;
+  if(l===missing||r===missing)return abstract?abstract(e):U;
   if(e.op==="eq"||e.op==="ne"){
    if(!scalar(l)||!scalar(r)||typeof l!==typeof r)return U;
    return e.op==="eq"?l===r:l!==r;
@@ -80,6 +80,38 @@ function reviewConditions(model){
   if(roots.some(k=>!obj(c.attributes[k])))invalid();
   attrTree(c.attributes);
  }
+ // Refine only unresolved design decisions. Identical missing-value predicates
+ // share a Boolean variable; different predicates remain independent, a conservative
+ // overapproximation. No attributes are invented or changed; exists remains factual.
+ // This proves agreement of abstract Boolean completions, not runtime access.
+ const atomKey=e=>JSON.stringify([e.op,...[e.left,e.right].map(o=>own(o,"path")?["path",o.path]:["literal",o.literal])]);
+ let refinementBudget=1000000;
+ function refine(c,matched){
+  const atoms=new Map();
+  let cost=0;
+  const collect=e=>{const k=atomKey(e);if(!atoms.has(k))atoms.set(k,atoms.size);return U};
+  function size(e){return 1+(e.args?e.args.reduce((n,x)=>n+size(x),0):e.arg?size(e.arg):0)}
+  for(const r of matched)for(const k of ["when","unless"])if(own(r,k)){cost+=size(r[k]);evaluate(r[k],c.attributes,collect)}
+  if(!atoms.size||atoms.size>8)return {decision:"unknown",reason:"unsupported_or_atom_limit"};
+  const worlds=2**atoms.size,work=worlds*Math.max(1,cost+matched.length);
+  if(work>refinementBudget)return {decision:"unknown",reason:"work_limit"};
+  refinementBudget-=work;
+  let consensus;
+  for(let mask=0;mask<worlds;mask++){
+   const truth=e=>Boolean(mask&(1<<atoms.get(atomKey(e))));
+   const permits=[],denials=[];
+   for(const r of matched){
+    const m=all([own(r,"when")?evaluate(r.when,c.attributes,truth):true,own(r,"unless")?not(evaluate(r.unless,c.attributes,truth)):true]);
+    (r.effect==="allow"?permits:denials).push(m);
+   }
+   const a=any(permits),d=any(denials);
+   const decision=d===true||a===false?"deny":a===true&&d===false?"allow":"unknown";
+   if(decision==="unknown"||(consensus!==undefined&&decision!==consensus))return {decision:"unknown",reason:"not_invariant"};
+   consensus=decision;
+  }
+  return {decision:consensus,reason:"invariant_abstract_completions"};
+ }
+ const refinement={attempted:0,resolved:0,remaining_unknown:0,budget_limited:0};
  const totals={cases:model.cases.length,decided:0,unknown:0,unlabeled:0,compared:0,correct:0,mismatches:0,overgrant:0,undergrant:0,conflicts:0};
  const results=[];
  for(const c of model.cases){
@@ -91,16 +123,24 @@ function reviewConditions(model){
   }
   const a=any(permits),d=any(denials);
   // Conservative three-valued review: never silently treat missing data as false.
-  const decision=d===true||a===false?"deny":a===true&&d===false?"allow":"unknown";
+  let decision=d===true||a===false?"deny":a===true&&d===false?"allow":"unknown";
+  let reasoning="direct";
+  if(decision==="unknown"){
+   refinement.attempted++;
+   const r=refine(c,model.rules.filter(r=>dims.every(k=>r[k]==="*"||r[k]===c[k])));
+   decision=r.decision;reasoning=r.reason;
+   if(decision==="unknown"){refinement.remaining_unknown++;if(r.reason==="work_limit"||r.reason==="unsupported_or_atom_limit")refinement.budget_limited++}
+   else refinement.resolved++;
+  }
   if(decision==="unknown")totals.unknown++;else totals.decided++;
   if(a===true&&d===true)totals.conflicts++;
   let status;
   if(c.expected===null){totals.unlabeled++;status="no_contract"}
   else if(decision==="unknown")status="needs_information";
   else{totals.compared++;if(c.expected===decision){totals.correct++;status="match"}else{totals.mismatches++;totals[decision==="allow"?"overgrant":"undergrant"]++;status="model_mismatch"}}
-  results.push({case_id:c.id,decision,status,conflict:a===true&&d===true});
+  results.push({case_id:c.id,decision,status,reasoning,conflict:a===true&&d===true});
  }
- return {status:totals.unknown||totals.unlabeled?"PARTIAL_MODEL_REVIEW":"COMPLETE_MODEL_REVIEW",totals,results,notice:"Owner-supplied local policy cases only. Unknown inputs abstain; explicit deny overrides permit. No actual application behavior or exploitability verified. Attributes are not echoed."};
+ return {status:totals.unknown||totals.unlabeled?"PARTIAL_MODEL_REVIEW":"COMPLETE_MODEL_REVIEW",totals,refinement,results,notice:"Owner-supplied local policy cases only. Unresolved inputs abstain; invariant abstract predicate completions may resolve a model decision; explicit deny overrides permit. No actual application behavior or exploitability verified. Attributes are not echoed."};
 }
 function selftest(){
  const literal=x=>({literal:x}),p=(...path)=>({path});
@@ -112,7 +152,7 @@ function selftest(){
  let passed=0;const check=(x,m)=>{if(!x)throw Error(m);passed++};
  const states=[t,f,u],names=["true","false","unknown"];
  // All nine combinations; manually specified decision table.
- const answers=[["deny","allow","unknown"],["deny","deny","deny"],["deny","unknown","unknown"]];
+ const answers=[["deny","allow","unknown"],["deny","deny","deny"],["deny","unknown","deny"]];
  for(let a=0;a<3;a++)for(let d=0;d<3;d++){
   const r=reviewConditions(model([rule("permit","allow",states[a]),rule("forbid","deny",states[d])],[row("case",{},null)]));
   check(r.results[0].decision===answers[a][d],names[a]+"/"+names[d]);
