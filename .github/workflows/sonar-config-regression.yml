@@ -1,0 +1,30 @@
+name: SonarSource configuration development regression
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/sonar-config-regression.yml'
+      - 'python-defaults-review.py'
+permissions:
+  contents: read
+jobs:
+  holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SonarSource/sonar-python
+          ref: 9ae0129e3f7b41be37b3b128e4b6447b467c278a
+          path: upstream-sonar
+          sparse-checkout: python-checks/src/test/resources/checks
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python python-defaults-review.py test
+      - run: python benchmark/sonar-config-holdout.py upstream-sonar
