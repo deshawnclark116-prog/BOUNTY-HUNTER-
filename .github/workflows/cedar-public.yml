@@ -1,0 +1,33 @@
+name: Public authorization conformance
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - policy-model.js
+      - benchmark/cedar-public.js
+      - .github/workflows/cedar-public.yml
+permissions:
+  contents: read
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: cedar-policy/cedar-integration-tests
+          ref: aff4b8b99acb71aa5b288fa236295cccbb40d541
+          path: cedar-fixtures
+          persist-credentials: false
+          sparse-checkout: |
+            tests/multi
+            tests/example_use_cases
+            sample-data
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify frozen engine against public local fixtures
+        run: node benchmark/cedar-public.js cedar-fixtures
