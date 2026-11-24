@@ -20,6 +20,22 @@ RESPONSES = {
     "pyramid.response.Response", "pyramid.httpexceptions.HTTPFound",
     "pyramid.httpexceptions.HTTPSeeOther", "pyramid.httpexceptions.HTTPTemporaryRedirect",
 }
+# Additional documented response constructors are used only for explicit
+# control inventories, not automatically promoted into legacy CWE findings.
+EXTENDED_RESPONSES = {
+    *("django.http." + name for name in (
+        "HttpResponsePermanentRedirect", "HttpResponseBadRequest",
+        "HttpResponseNotModified", "HttpResponseNotFound", "HttpResponseForbidden",
+        "HttpResponseNotAllowed", "HttpResponseGone", "HttpResponseServerError")),
+    "flask.redirect", "flask.helpers.redirect",
+    *("fastapi.responses." + name for name in (
+        "Response", "HTMLResponse", "PlainTextResponse", "JSONResponse",
+        "RedirectResponse", "StreamingResponse", "FileResponse")),
+    "fastapi.Response",
+    *("starlette.responses." + name for name in (
+        "Response", "HTMLResponse", "PlainTextResponse", "JSONResponse",
+        "RedirectResponse", "StreamingResponse", "FileResponse")),
+}
 TLS_CALLS = {
     *("requests." + m for m in ("get", "post", "put", "patch", "delete", "head", "options", "request")),
     *("httpx." + m for m in ("get", "post", "put", "patch", "delete", "head", "options", "request", "Client", "AsyncClient")),
@@ -92,10 +108,18 @@ def recognized_cookie_calls(tree, include_framework_inference=False):
                 return "pyramid.response.Response"
         return None
 
+    known_responses = RESPONSES | EXTENDED_RESPONSES if include_framework_inference else RESPONSES
+
     def recognized_cookie(call, imports, values):
-        return (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
-                and call.func.attr == "set_cookie"
-                and response(call.func.value, imports, values) in RESPONSES)
+        if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
+            return False
+        origin = response(call.func.value, imports, values)
+        if origin not in known_responses:
+            return False
+        if call.func.attr == "set_cookie":
+            return True
+        return (include_framework_inference and call.func.attr == "set_signed_cookie"
+                and origin.startswith("django.http."))
 
     findings = []
     def walk(body, inherited, args=None, request_param=None):
@@ -144,7 +168,7 @@ def recognized_cookie_calls(tree, include_framework_inference=False):
                 resolved = response(s.value, imports, values)
                 imports.pop(k, None)
                 values.pop(k, None)
-                if resolved in RESPONSES and (isinstance(s.value, ast.Call) or include_framework_inference and isinstance(s.value, (ast.Attribute, ast.Name))):
+                if resolved in known_responses and (isinstance(s.value, ast.Call) or include_framework_inference and isinstance(s.value, (ast.Attribute, ast.Name))):
                     values[k] = resolved
                 continue
             values.clear()
@@ -383,13 +407,25 @@ def selftest():
         assert len(rows) == expected, source
         assert all(row["provenance"]=="framework_or_alias_inference" for row in rows)
         assert not inspect_source(source), "Do not silently promote inferred provenance into legacy vulnerability labels"
+    inventory_cases = [
+        ("from fastapi import Response\nr=Response()\nr.set_cookie('demo','x',secure=True,httponly=True)", ("enabled","enabled","not_explicit")),
+        ("from starlette.responses import JSONResponse\nr=JSONResponse({})\nr.set_cookie('demo','x',secure=True,httponly=False)", ("enabled","disabled","not_explicit")),
+        ("from django.http import HttpResponseNotFound\nr=HttpResponseNotFound()\nr.set_signed_cookie('demo','x',secure=True,httponly=True)", ("enabled","enabled","not_explicit")),
+        ("from flask import redirect\nr=redirect('/local')\nr.set_cookie('demo','x',secure=True,httponly=True)", ("enabled","enabled","not_explicit")),
+        ("from django.http import HttpResponseForbidden\nr=HttpResponseForbidden()\nr.set_cookie('demo','x',secure=setting)", ("unknown","not_explicit","not_explicit")),
+    ]
+    for source, expected in inventory_cases:
+        rows = cookie_control_observations(source)
+        assert len(rows) == 1, source
+        assert tuple(rows[0][k] for k in ("secure","httponly","samesite")) == expected
+        assert not inspect_source(source), "Inventory does not promote inferred or extended API observations"
     for source, expected in control_cases:
         rows = cookie_control_observations(source)
         assert len(rows) == 1
         assert tuple(rows[0][k] for k in ("secure","httponly","samesite")) == expected
     for source, expected in cases:
         assert [f["cwe"] for f in inspect_source(source)] == expected, source
-    print(json.dumps({"passed": len(cases)+len(control_cases)+len(inferred_cases), "scope": "authored configuration review tests"}))
+    print(json.dumps({"passed": len(cases)+len(control_cases)+len(inferred_cases)+len(inventory_cases), "scope": "authored configuration review tests"}))
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["test"]:
