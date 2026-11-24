@@ -23,6 +23,122 @@ TLS_CALLS = {
 }
 UNKNOWN = object()
 
+def direct_cookie_observations(tree):
+    """Bounded lexical, straight-line review of response construction."""
+    def local_bindings(body, args=None):
+        counts = defaultdict(int)
+        class Bindings(ast.NodeVisitor):
+            def visit_Name(self, node):
+                if isinstance(node.ctx, (ast.Store, ast.Del)):
+                    counts[node.id] += 1
+            def visit_Import(self, node):
+                for a in node.names:
+                    counts[a.asname or a.name.split(".")[0]] += 1
+            def visit_ImportFrom(self, node):
+                for a in node.names:
+                    counts[a.asname or a.name] += 1
+            def visit_FunctionDef(self, node):
+                counts[node.name] += 1
+            visit_AsyncFunctionDef = visit_FunctionDef
+            visit_ClassDef = visit_FunctionDef
+            def visit_Lambda(self, node):
+                pass
+            def visit_ExceptHandler(self, node):
+                if node.name:
+                    counts[node.name] += 1
+                self.generic_visit(node)
+            def visit_MatchAs(self, node):
+                if node.name:
+                    counts[node.name] += 1
+                self.generic_visit(node)
+            visit_MatchStar = visit_MatchAs
+            def visit_MatchMapping(self, node):
+                if node.rest:
+                    counts[node.rest] += 1
+                self.generic_visit(node)
+        visitor = Bindings()
+        for statement in body:
+            visitor.visit(statement)
+        if args:
+            for a in [*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg]:
+                if a:
+                    counts[a.arg] += 1
+        return counts
+
+    def qname(node, imports):
+        if isinstance(node, ast.Name):
+            return imports.get(node.id)
+        if isinstance(node, ast.Attribute):
+            parent = qname(node.value, imports)
+            return parent + "." + node.attr if parent else None
+        return None
+
+    def response(node, imports, values):
+        if isinstance(node, ast.Name):
+            return values.get(node.id)
+        if isinstance(node, ast.Call):
+            return qname(node.func, imports)
+        return None
+
+    def explicit_cookie(call, imports, values):
+        if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
+            return False
+        if call.func.attr != "set_cookie" or response(call.func.value, imports, values) not in RESPONSES:
+            return False
+        if len(call.args) > 2 or any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None for k in call.keywords):
+            return False
+        keys = [k.value for k in call.keywords if k.arg == "secure"]
+        return not keys or (len(keys) == 1 and isinstance(keys[0], ast.Constant) and keys[0].value is False)
+
+    findings = []
+    def walk(body, inherited, args=None):
+        counts = local_bindings(body, args)
+        imports = {k:v for k,v in inherited.items() if k not in counts}
+        values = {}
+        if any(isinstance(n, (ast.Global, ast.Nonlocal)) or
+               isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names)
+               for s in body for n in ast.walk(s)):
+            return
+        for s in body:
+            if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                stable = {k:v for k,v in imports.items() if counts.get(k, 0) <= 1}
+                walk(s.body, stable, s.args)
+                imports.pop(s.name, None)
+                values.pop(s.name, None)
+                continue
+            if isinstance(s, (ast.Import, ast.ImportFrom)):
+                for a in s.names:
+                    k = a.asname or (a.name.split(".")[0] if isinstance(s, ast.Import) else a.name)
+                    values.pop(k, None)
+                    if isinstance(s, ast.Import):
+                        imports[k] = a.name if a.asname else k
+                    elif s.level == 0 and s.module:
+                        imports[k] = s.module + "." + a.name
+                    else:
+                        imports.pop(k, None)
+                continue
+            if isinstance(s, (ast.Expr, ast.Return)):
+                if explicit_cookie(s.value, imports, values):
+                    findings.append(s.value)
+                if isinstance(s, ast.Return):
+                    break
+                continue
+            if isinstance(s, ast.Assign) and len(s.targets) == 1 and isinstance(s.targets[0], ast.Name):
+                k = s.targets[0].id
+                resolved = response(s.value, imports, values)
+                imports.pop(k, None)
+                values.pop(k, None)
+                if isinstance(s.value, ast.Call) and resolved in RESPONSES:
+                    values[k] = resolved
+                continue
+            values.clear()
+            for k in local_bindings([s]):
+                imports.pop(k, None)
+            if any(isinstance(n, ast.Attribute) and isinstance(n.ctx, (ast.Store, ast.Del)) for n in ast.walk(s)):
+                imports.clear()
+    walk(tree.body, {})
+    return findings
+
 def inspect_source(source):
     tree = ast.parse(source)
     nodes = list(ast.walk(tree))
@@ -104,12 +220,9 @@ def inspect_source(source):
         if q == "ssl._create_unverified_context":
             add(n, 295, "unverified_tls_context_selected",
                 "Use a verified TLS context appropriate to the connection.")
-        if isinstance(n.func, ast.Attribute) and n.func.attr == "set_cookie" and constructor(n.func.value) in RESPONSES:
-            # Do not infer positional options beyond name/value. Cookie sensitivity
-            # and the deployment's actual transport policy still require review.
-            if len(n.args) <= 2 and keyword(n, "secure", False) is False:
-                add(n, 614, "cookie_secure_not_enabled",
-                    "For cookies carrying sensitive state, set Secure and require HTTPS.")
+    for n in direct_cookie_observations(tree):
+        add(n, 614, "cookie_secure_not_enabled",
+            "For cookies carrying sensitive state, set Secure and require HTTPS.")
     return sorted(findings, key=lambda f: (f["line"], f["rule"]))
 
 def review_files(paths):
@@ -151,6 +264,13 @@ def selftest():
         ("from flask import Response\nr=Response()\nr.set_cookie('id','x',secure=setting)", []),
         ("from flask import Response\n# Response().set_cookie('id','x')", []),
     ]
+    cases.extend([
+        ("from flask import make_response\n"
+         "def build():\n from flask import make_response\n response=''\n"
+         " response=make_response(response)\n response.set_cookie('id','x',secure=False)", [614]),
+        ("from flask import Response\ndef build(Response):\n r=Response()\n r.set_cookie('id','x')", []),
+        ("from flask import Response\ndef build():\n r=Response()\n if cond: r=other()\n r.set_cookie('id','x')", []),
+    ])
     for source, expected in cases:
         assert [f["cwe"] for f in inspect_source(source)] == expected, source
     print(json.dumps({"passed": len(cases), "scope": "authored configuration review tests"}))
