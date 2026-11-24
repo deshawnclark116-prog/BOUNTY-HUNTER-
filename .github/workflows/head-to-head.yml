@@ -1,0 +1,61 @@
+name: First-party versus established Python reviewers
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'digest-review.py'
+      - 'python-defaults-review.py'
+      - 'benchmark/head_to_head.py'
+      - '.github/workflows/head-to-head.yml'
+permissions:
+  contents: read
+jobs:
+  public-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SEMGREP_SEND_METRICS: 'off'
+      SEMGREP_ENABLE_VERSION_CHECK: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: OWASP-Benchmark/BenchmarkPython
+          ref: f1291485808b66e20ddb6b01b10dc71b3df8c8ba
+          path: public-lab
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: semgrep/semgrep-rules
+          ref: a5ad1714f00c9f7fde980cab0ea1d6dc6d414fd2
+          path: public-rules
+          persist-credentials: false
+          sparse-checkout: python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install setuptools==80.9.0 semgrep==1.130.0 bandit==1.8.6
+      - name: Freeze rule input
+        run: |
+          mkdir -p benchmark-output
+          git -C public-lab rev-parse HEAD > benchmark-output/dataset-commit.txt
+          git -C public-rules rev-parse HEAD > benchmark-output/rules-commit.txt
+          semgrep --version
+      - name: Analyze public benchmark source without execution
+        run: |
+          semgrep scan --config public-rules/python --metrics off --disable-version-check --no-git-ignore --json --output benchmark-output/semgrep.json public-lab/testcode
+          python benchmark/score_semgrep.py public-lab/expectedresults-0.1.csv benchmark-output/semgrep.json public-lab/testcode > benchmark-output/summary.json
+          cat benchmark-output/summary.json
+      - name: Compare frozen local source reviewers
+        run: |
+          bandit -r public-lab/testcode -f json -o benchmark-output/bandit.json --exit-zero
+          python digest-review.py review public-lab/testcode --authorized-local > benchmark-output/digest.json
+          python python-defaults-review.py review public-lab/testcode --authorized-local > benchmark-output/defaults.json
+          python benchmark/head_to_head.py public-lab/expectedresults-0.1.csv public-lab/testcode benchmark-output
+      - uses: actions/upload-artifact@v4
+        with:
+          name: head-to-head-summary
+          path: benchmark-output/head-to-head.json
+          if-no-files-found: error
