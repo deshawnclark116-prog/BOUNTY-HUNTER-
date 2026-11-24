@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'benchmark/score_semgrep.py'
+      - 'benchmark/compare_python.py'
       - '.github/workflows/semgrep-benchmark.yml'
 permissions:
   contents: read
@@ -34,7 +35,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install setuptools==80.9.0 semgrep==1.130.0
+      - run: python -m pip install setuptools==80.9.0 semgrep==1.130.0 bandit==1.8.6
       - name: Freeze rule input
         run: |
           mkdir -p benchmark-output
@@ -46,6 +47,12 @@ jobs:
           semgrep scan --config public-rules/python --metrics off --disable-version-check --no-git-ignore --json --output benchmark-output/semgrep.json public-lab/testcode
           python benchmark/score_semgrep.py public-lab/expectedresults-0.1.csv benchmark-output/semgrep.json public-lab/testcode > benchmark-output/summary.json
           cat benchmark-output/summary.json
+      - name: Compare analyzer agreement on the same public lab
+        run: |
+          python benchmark/compare_python.py test
+          bandit -r public-lab/testcode -f json -o benchmark-output/bandit.json --exit-zero
+          python benchmark/compare_python.py public-lab/expectedresults-0.1.csv benchmark-output/bandit.json benchmark-output/semgrep.json public-lab/testcode > benchmark-output/comparison.json
+          python -c 'import json; d=json.load(open("benchmark-output/comparison.json")); print(json.dumps({k:v["summary"] for k,v in d["results"].items()},indent=2))'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
