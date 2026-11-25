@@ -13,6 +13,7 @@ from collections import defaultdict
 # Reuse only the bounded file reader from our own previously reviewed module.
 _local_read = runpy.run_path(str(pathlib.Path(__file__).with_name("digest-review.py")))["local_read"]
 observation_calls = runpy.run_path(str(pathlib.Path(__file__).with_name("source-policy.py")))["observation_calls"]
+configuration_keywords = runpy.run_path(str(pathlib.Path(__file__).with_name("configuration-values.py")))["configuration_keywords"]
 RESPONSES = {
     "flask.Response", "flask.make_response", "flask.wrappers.Response",
     "werkzeug.wrappers.Response", "django.http.HttpResponse",
@@ -179,7 +180,7 @@ def recognized_cookie_calls(tree, include_framework_inference=False):
     walk(tree.body, {})
     return findings
 
-def cookie_setting(call, key):
+def cookie_setting(call, key, resolved=None):
     # Only name/value positional arguments are supported. Expanded or ambiguous
     # arguments are explicitly unassessed, not assumed to be secure.
     if len(call.args) > 2 or any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None for k in call.keywords):
@@ -187,9 +188,14 @@ def cookie_setting(call, key):
     values = [k.value for k in call.keywords if k.arg == key]
     if not values:
         return "not_explicit"
-    if len(values) != 1 or not isinstance(values[0], ast.Constant):
+    if len(values) != 1:
         return "unknown"
-    v = values[0].value
+    if isinstance(values[0], ast.Constant):
+        v = values[0].value
+    elif resolved is not None and key in resolved:
+        v = resolved[key]
+    else:
+        return "unknown"
     if key in {"secure", "httponly"}:
         return "enabled" if v is True else "disabled" if v is False else "unknown"
     if key == "samesite":
@@ -207,12 +213,13 @@ def cookie_control_observations(source):
     tree = ast.parse(source)
     allowed = observation_calls(tree)
     direct = set(recognized_cookie_calls(tree))
+    resolved = configuration_keywords(tree)
     return sorted([
         {"line": call.lineno, "end_line": call.end_lineno,
          "provenance": "direct_constructor" if call in direct else "framework_or_alias_inference",
-         "secure": cookie_setting(call, "secure"),
-         "httponly": cookie_setting(call, "httponly"),
-         "samesite": cookie_setting(call, "samesite")}
+         "secure": cookie_setting(call, "secure", resolved.get(call)),
+         "httponly": cookie_setting(call, "httponly", resolved.get(call)),
+         "samesite": cookie_setting(call, "samesite", resolved.get(call))}
         for call in recognized_cookie_calls(tree, include_framework_inference=True) if call in allowed
     ], key=lambda row: row["line"])
 
