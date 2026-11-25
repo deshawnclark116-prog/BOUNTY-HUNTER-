@@ -1,0 +1,28 @@
+name: Frozen public training application assessment
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/application-coverage.yml'
+permissions:
+  contents: read
+jobs:
+  source-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: adeyosemanputra/pygoat
+          ref: 2aa4cc14f251e4a780e94e200aed6b36a5b15c21
+          path: public-training
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: git diff --exit-code e28e3cddb8cdd12f0c2cd0ebd0a88b415725d011 HEAD -- python-defaults-review.py digest-review.py source-policy.py configuration-values.py
+      - run: python benchmark/application-coverage.py public-training
