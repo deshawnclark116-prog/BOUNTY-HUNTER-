@@ -1,0 +1,48 @@
+name: Frozen Ruff configuration reference comparison
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/ruff-config-reference.yml'
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: astral-sh/ruff
+          ref: 5faf72a4d9b50c6e330165685e57fae14ca68b73
+          path: upstream-ruff
+          sparse-checkout: crates/ruff_linter/resources/test/fixtures/flake8_bandit
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ruff==0.11.13
+      - name: Compare frozen static observations on separate fixtures
+        run: |
+          git diff --exit-code e28e3cddb8cdd12f0c2cd0ebd0a88b415725d011 HEAD -- python-defaults-review.py digest-review.py source-policy.py configuration-values.py
+          folder=upstream-ruff/crates/ruff_linter/resources/test/fixtures/flake8_bandit
+          ruff check --isolated --no-cache --select S324,S501 --output-format json --exit-zero "$folder/S324.py" "$folder/S501.py" > reference.json
+          python digest-review.py review "$folder/S324.py" --authorized-local > digest.json
+          python python-defaults-review.py review "$folder/S501.py" --authorized-local > defaults.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ref=json.load(open("reference.json"))
+          result={}
+          for rule,cwe,name,file in [("S324",328,"digest","S324.py"),("S501",295,"defaults","S501.py")]:
+              local=json.load(open(name+".json"))
+              assert not local["errors"] and len(local["metrics"])==1
+              expected={x["location"]["row"] for x in ref if x["code"]==rule and Path(x["filename"]).name==file}
+              actual={x["line_number"] for x in local["results"] if x["issue_cwe"]["id"]==cwe}
+              result[rule]={"reference":len(expected),"candidate":len(actual),"agreement":len(expected & actual),"reference_only":len(expected-actual),"candidate_only":len(actual-expected)}
+          print(json.dumps({"scope":"two previously uninspected public fixtures, exact-line reference agreement only; no independent negative labels or confirmed vulnerability truth","results":result},indent=2))
+          PY
