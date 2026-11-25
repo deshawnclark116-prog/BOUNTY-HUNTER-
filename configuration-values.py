@@ -61,7 +61,7 @@ def configuration_keywords(tree):
                 k=stmt.targets[0].id
                 v=scalar(stmt.value, env)
                 record(stmt.value, env)
-                if module and isinstance(stmt.value, ast.Call):
+                if module and v is UNKNOWN_VALUE:
                     env.clear()
                 env.pop(k,None)
                 if v is not UNKNOWN_VALUE:
@@ -79,8 +79,9 @@ def configuration_keywords(tree):
                     if not falls:
                         return env, False
                 else:
-                    left,lf=block(stmt.body,env,module)
-                    right,rf=block(stmt.orelse,env,module)
+                    branch_env = {} if module else env
+                    left,lf=block(stmt.body,branch_env,module)
+                    right,rf=block(stmt.orelse,branch_env,module)
                     if not lf and not rf:
                         return {},False
                     env=merge(left,right) if lf and rf else left if lf else right
