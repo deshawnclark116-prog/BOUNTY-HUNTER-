@@ -1,0 +1,24 @@
+name: Scalar configuration regression
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'configuration-values.py'
+      - 'python-defaults-review.py'
+      - 'benchmark/configuration-values.py'
+      - '.github/workflows/configuration-values.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python python-defaults-review.py test
+      - run: python benchmark/configuration-values.py
