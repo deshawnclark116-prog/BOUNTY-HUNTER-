@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "program": "EXAMPLE-ONLY: replace after reading the current official brief",
+  "authorization": "owner_or_explicit_permission",
+  "as_of": "2000-01-01",
+  "methods_permitted": ["local_source_analysis"],
+  "source_roots": ["/path/to/source/you/are/authorized/to/review"]
+}

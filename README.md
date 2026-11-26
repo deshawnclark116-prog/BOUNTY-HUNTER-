@@ -115,3 +115,14 @@ python digest-review.py test
 python digest-review.py review path/to/authorized-local-file.py --authorized-local
 ```
 Reads Python source through the AST without importing or running the inspected program. Reports explicitly selected legacy digest algorithms with recognized import provenance. Explicit non-security hashlib usage is excluded. A directory review covers immediate Python files only. Dynamic resolution, attribute reassignment, runtime context, nonliteral algorithm choice and other vulnerability classes are not fully modeled. A flag is a cryptographic policy observation, not confirmation of security impact; a clean result is not an assurance of security. The public OWASP benchmark workflow scores exact case/CWE agreement using the pinned lab answer key.
+
+## v0.11 authorization-gap review and scope-gated orchestrator
+Scanners mostly find pattern-based bugs that thousands of researchers already report. Authorization and logic flaws (one caller reaching another caller's object, state-changing routes with no authentication) are under-searched because tools do not know what an app is supposed to allow. This release targets that class, locally.
+```sh
+python3 authz-review.py test
+python3 authz-review.py review /path/to/authorized/source --authorized-local
+node orchestrator.js test
+node orchestrator.js run /path/to/private-scope.json /path/to/authorized/source --authorized-local
+```
+`authz-review.py` reads Flask/Quart/FastAPI/Starlette-style route handlers through the AST (no import or execution) and reports two lead types: `missing_authentication` and `missing_object_authorization`. Role/admin-gated routes are excluded from the ownership rule. If global middleware is visible, missing-authentication leads are downgraded to `needs_review_global_auth_possible`. Known gaps: identifiers not named like id/pk/uuid/slug/key, Django class-based views, and checks hidden in custom helpers.
+`orchestrator.js` refuses to run unless a private scope file (see examples/scope.json) is current (as_of within 7 days), declares owner or program authorization, permits only `local_source_analysis`, and covers the target path after symlink resolution. It then runs the offline Python analyzers and returns one ranked queue of `unverified_lead` items, authorization gaps first. It does no scanning of live systems and no submission. Keep real scope files and queue output private (`private/` and `*.private.json` are git-ignored). Leads must be verified by hand within the program rules before any report.
