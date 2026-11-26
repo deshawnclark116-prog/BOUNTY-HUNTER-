@@ -12,8 +12,8 @@ const AUTH = new Set(['owner_or_explicit_permission', 'program_scope_read_and_el
 const ANALYZERS = [
   // priority: lower = reviewed first. Authorization-logic gaps outrank configuration observations.
   { name: 'authz-review', script: 'authz-review.py', priority: 1 },
-  { name: 'python-defaults-review', script: 'python-defaults-review.py', priority: 2 },
-  { name: 'digest-review', script: 'digest-review.py', priority: 3 },
+  { name: 'python-defaults-review', script: 'python-defaults-review.py', priority: 2, perDirectory: true },
+  { name: 'digest-review', script: 'digest-review.py', priority: 3, perDirectory: true },
 ];
 
 function checkScope(scope, target, now = new Date()) {
@@ -43,7 +43,26 @@ function checkScope(scope, target, now = new Date()) {
   return { target: real, as_of: scope.as_of, age_days: Math.max(0, Math.floor(ageDays)) };
 }
 
+function pythonDirs(target) {
+  // The older analyzers read only the immediate .py files of a directory, so run them once per directory.
+  const skip = new Set(['node_modules', '.git', 'venv', '.venv', '__pycache__']);
+  if (!fs.statSync(target).isDirectory()) return [target];
+  const dirs = [];
+  const walk = (d, depth) => {
+    const entries = fs.readdirSync(d, { withFileTypes: true });
+    if (entries.some((e) => e.isFile() && e.name.endsWith('.py'))) dirs.push(d);
+    if (depth < 8) for (const e of entries) if (e.isDirectory() && !e.isSymbolicLink() && !skip.has(e.name)) walk(path.join(d, e.name), depth + 1);
+  };
+  walk(target, 0);
+  return dirs;
+}
+
 function runAnalyzer(a, target) {
+  if (a.perDirectory) {
+    const runs = pythonDirs(target).map((d) => runAnalyzer({ ...a, perDirectory: false }, d));
+    if (runs.some((r) => !r.ok)) return { name: a.name, ok: false };
+    return { name: a.name, ok: true, priority: a.priority, data: { results: runs.flatMap((r) => r.data.results || []) } };
+  }
   let stdout;
   try {
     stdout = execFileSync('python3', [path.join(__dirname, a.script), 'review', target, '--authorized-local'],

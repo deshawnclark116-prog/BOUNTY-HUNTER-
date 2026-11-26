@@ -28,6 +28,8 @@ IDENTITY_TOKENS = ("current_user", "request.user", "g.user", "get_jwt_identity",
                    "session.get(", "token_data", "principal")
 AUTHZ_CALL_HINTS = ("authorize", "permission", "owner", "can_", "has_access", "check_access", "policy",
                     "ensure_", "verify_", "require_", "assert_", "is_allowed", "acl")
+AUTH_CALL_HINTS = ("verify_jwt", "verify_token", "decode_token", "check_auth", "authenticate", "validate_token",
+                   "login_check", "require_login", "check_session")
 LOOKUP_ATTRS = {"get", "get_or_404", "first_or_404", "filter_by", "filter", "find_one", "find", "fetch_one",
                 "fetchone", "execute", "one", "first", "delete", "one_or_none", "scalar", "scalars"}
 LOOKUP_FUNCS = {"get_object_or_404", "get_or_404", "get_list_or_404"}
@@ -137,7 +139,9 @@ def inspect_handler(func, file_flags):
     auth_params, dep_params = dependency_params(func)
     identity = tuple(IDENTITY_TOKENS) + tuple(auth_params)
     body_nodes = [n for stmt in func.body for n in ast.walk(stmt)]
-    authenticated = decorator_auth(func) or bool(auth_params) or \
+    helper_auth = any(isinstance(n, ast.Call) and any(h in dotted(n.func).lower() for h in AUTH_CALL_HINTS)
+                      for n in body_nodes)
+    authenticated = decorator_auth(func) or bool(auth_params) or helper_auth or \
         any(any(t in text(n) for t in IDENTITY_TOKENS) for n in body_nodes if isinstance(n, (ast.Attribute, ast.Subscript)))
     findings = []
     public = bool(PUBLIC_PATH.search(path or ""))
@@ -265,6 +269,7 @@ FIXTURES = [
     ("constant mapping get", "@app.route('/c/<int:cat_id>')\n@login_required\ndef g(cat_id):\n    return CATS.get(cat_id)\n", set()),
     ("session auth but no owner check", "@app.route('/msg/<int:msg_id>')\ndef g(msg_id):\n    if 'uid' not in session: return redirect('/x')\n    return Msg.query.get(msg_id).body\n",
      {("g", "missing_object_authorization")}),
+    ("helper verifies token", "@app.route('/fetch',methods=['POST'])\ndef f():\n    if not verify_jwt(request.headers['Authorization']):\n        return 'no',401\n    return data()\n", set()),
     ("global before_request", "@app.before_request\ndef gate():\n    check_session()\n@app.route('/settings',methods=['POST'])\ndef s():\n    set_all(request.json)\n",
      {("s", "missing_authentication")}),
 ]
